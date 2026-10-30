@@ -295,25 +295,30 @@ test('collectMentions / describeSessionForModel：区分 @自己、@别人、@�
   assert.equal(aiChat.describeSessionForModel(allSession, SELF_ID), '@全体成员')
 })
 
-test('@别人且没有 @机器人 时不触发回复', async (t) => {
+test('@别人时可以作为群友按概率接话，并带上 @ 对象信息', async (t) => {
   const { app, calls } = await setup(t, { replyProbability: 1 })
   const replies = await app.mock.client(USER, GROUP).receive('<at id="999" name="小明"/> 晚上开黑吗')
-  assert.deepEqual(replies, [])
-  assert.equal(calls.length, 0)
+  assert.deepEqual(replies, ['这是 AI 的回复'])
+  assert.equal(calls.length, 1)
+  assert.deepEqual(calls[0].body.mentionOthers, ['小明'])
+  assert.equal(calls[0].body.mentionSelf, false)
+  assert.match(calls[0].body.messages[0].text, /@小明/u)
 })
 
-test('@全体成员不会触发概率回复', async (t) => {
+test('@全体成员可以按概率自然参与', async (t) => {
   const { app, calls } = await setup(t, { replyProbability: 1 })
   const replies = await app.mock.client(USER, GROUP).receive('<at id="all"/> 大家晚上好')
-  assert.deepEqual(replies, [])
-  assert.equal(calls.length, 0)
+  assert.deepEqual(replies, ['这是 AI 的回复'])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].body.mentionAll, true)
 })
 
-test('跟进窗口内 @别人 也不会插话', async (t) => {
+test('跟进窗口内 @别人 仍然继续回复', async (t) => {
   const { app, calls } = await setup(t, { replyProbability: 0, followUpMinutes: 3 })
   await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
   assert.equal(calls.length, 1)
   const other = await app.mock.client(USER, GROUP).receive('<at id="999" name="小明"/> 你晚上来吗')
-  assert.deepEqual(other, [])
-  assert.equal(calls.length, 1)
+  assert.deepEqual(other, ['这是 AI 的回复'])
+  assert.equal(calls.length, 2)
+  assert.deepEqual(calls[1].body.mentionOthers, ['小明'])
 })

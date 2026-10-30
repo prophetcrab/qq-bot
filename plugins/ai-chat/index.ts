@@ -429,9 +429,7 @@ export function apply(ctx: Context, config: Config): void {
     const imageUrls = collectImageUrls(session, config.imageLimit)
     const userKey = followKey(session)
     const activeBatch = batches.get(userKey)
-    const activeMentions = collectMentions(session, String(session.selfId))
-    const activeAddressedElsewhere = !activeMentions.self && !isReplyToSelf(session, String(session.selfId)) && (activeMentions.others.length > 0 || activeMentions.all)
-    if (!isCommand && activeBatch !== undefined && !activeAddressedElsewhere && (content !== '' || imageUrls.length > 0)) {
+    if (!isCommand && activeBatch !== undefined && (content !== '' || imageUrls.length > 0)) {
       if (content !== '') activeBatch.texts.push(content)
       for (const url of imageUrls) if (!activeBatch.imageUrls.includes(url)) activeBatch.imageUrls.push(url)
       activeBatch.imageUrls = activeBatch.imageUrls.slice(0, config.imageLimit)
@@ -445,13 +443,12 @@ export function apply(ctx: Context, config: Config): void {
     const mentioned = mentions.self
     const replied = isReplyToSelf(session, String(session.selfId))
     const forced = mentioned || replied
-    const addressedElsewhere = !mentioned && !replied && (mentions.others.length > 0 || mentions.all)
     const inFollowUp = (followUntil.get(followKey(session)) ?? 0) > Date.now()
     const hasContent = content !== '' || imageUrls.length > 0
     const userBusy = replyQueues.has(followKey(session))
-    const randomHit = !forced && !addressedElsewhere && !inFollowUp && !userBusy && hasContent && Math.random() < runtime.replyProbability
-    const shouldReply = !isCommand && hasContent && !addressedElsewhere && (forced || inFollowUp || userBusy || randomHit)
-    const reason = addressedElsewhere ? 'addressed-elsewhere' : forced ? (mentioned ? 'mention' : 'reply') : inFollowUp ? 'follow-up' : userBusy ? 'queued' : randomHit ? 'probability' : 'none'
+    const randomHit = !forced && !inFollowUp && !userBusy && hasContent && Math.random() < runtime.replyProbability
+    const shouldReply = !isCommand && hasContent && (forced || inFollowUp || userBusy || randomHit)
+    const reason = forced ? (mentioned ? 'mention' : 'reply') : inFollowUp ? 'follow-up' : userBusy ? 'queued' : randomHit ? 'probability' : 'none'
 
     state.lastInbound = {
       at: new Date().toISOString(),
@@ -462,7 +459,6 @@ export function apply(ctx: Context, config: Config): void {
       mention: mentioned,
       mentions: mentions.others,
       mentionAll: mentions.all,
-      addressedElsewhere,
       replyToBot: replied,
       followUp: inFollowUp,
       images: imageUrls.length,
@@ -516,6 +512,8 @@ export function apply(ctx: Context, config: Config): void {
     const current: HistoryMessage = { role: 'user', name, text: prompt }
     const messages: HistoryMessage[] = [{ role: 'user', text: prompt }]
     const background = buildBackground(key)
+    const shareMentions = collectMentions(session, String(session.selfId))
+    const replyToBot = isReplyToSelf(session, String(session.selfId))
     try {
       const images = imageUrls.length > 0 ? await downloadImages(session, config) : []
       const controller = new AbortController()
@@ -533,6 +531,10 @@ export function apply(ctx: Context, config: Config): void {
             groupId: key,
             userId: String(session.userId ?? ''),
             userName: name,
+            mentionSelf: shareMentions.self,
+            mentionOthers: shareMentions.others,
+            mentionAll: shareMentions.all,
+            replyToBot,
             ...(config.systemPrompt !== '' ? { system: config.systemPrompt } : {}),
           }),
           signal: controller.signal,
