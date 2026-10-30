@@ -335,3 +335,29 @@ test('AI 自检决定不回复时保持安静', async (t) => {
   assert.deepEqual(replies, [])
   assert.equal(calls.length, 0)
 })
+
+
+test('上游服务繁忙时不往群里发错误提示', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1 })
+  globalThis.fetch = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: false, code: 'BUSY', retryable: true, error: '模型服务繁忙，请稍后再试' }),
+  })) as any
+  const replies = await app.mock.client(USER, GROUP).receive('有人吗')
+  assert.deepEqual(replies, [])
+  assert.equal(calls.length, 0)
+})
+
+
+test('背景里别人发过的图片会作为 backgroundImages 一起发送', async (t) => {
+  const { app, calls, imageRequests } = await setup(t, { replyProbability: 0 })
+  await app.mock.client(USER_B, GROUP).receive(`<img src="${IMAGE_URL}"/>`)
+  const replies = await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 分析一下这张图`)
+  assert.deepEqual(replies, ['这是 AI 的回复'])
+  assert.equal(calls.length, 1)
+  assert.equal(imageRequests.length, 1)
+  assert.equal(calls[0].body.backgroundImages.length, 1)
+  assert.equal(calls[0].body.backgroundImages[0].mediaType, 'image/png')
+  assert.equal(calls[0].body.images.length, 0)
+})

@@ -64,6 +64,7 @@ interface HistoryMessage {
   role: 'user' | 'assistant'
   name?: string
   text: string
+  images?: string[]
 }
 
 interface Discovery {
@@ -269,9 +270,8 @@ function mediaTypeOf(contentType: string | null, url: string): string {
   return 'image/jpeg'
 }
 
-/** Download current-message images for multimodal inference. */
-export async function downloadImages(session: any, config: Config, fetchImpl: typeof fetch = fetch): Promise<InboundImage[]> {
-  const urls = collectImageUrls(session, Math.max(0, config.imageLimit))
+/** Download images for multimodal inference. */
+export async function downloadImageUrls(urls: string[], config: Config, fetchImpl: typeof fetch = fetch): Promise<InboundImage[]> {
   const images: InboundImage[] = []
   for (const url of urls) {
     try {
@@ -294,6 +294,10 @@ export async function downloadImages(session: any, config: Config, fetchImpl: ty
     }
   }
   return images
+}
+
+export async function downloadImages(session: any, config: Config, fetchImpl: typeof fetch = fetch): Promise<InboundImage[]> {
+  return downloadImageUrls(collectImageUrls(session, Math.max(0, config.imageLimit)), config, fetchImpl)
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -372,6 +376,17 @@ export function apply(ctx: Context, config: Config): void {
     const cap = Math.max(2, runtime.historyLimit * 2 + 2)
     if (list.length > cap) list.splice(0, list.length - cap)
     history.set(key, list)
+  }
+
+  const collectBackgroundImages = (key: string): string[] => {
+    const list = (history.get(key) ?? []).slice(-20)
+    const urls: string[] = []
+    for (const item of list) {
+      for (const url of item.images ?? []) {
+        if (!urls.includes(url)) urls.push(url)
+      }
+    }
+    return urls.slice(-Math.max(0, config.imageLimit))
   }
 
   const buildBackground = (key: string): string => {
@@ -470,7 +485,7 @@ export function apply(ctx: Context, config: Config): void {
 
     if (!shouldReply) {
       if (content !== '' && !isCommand && content.length <= 2000) {
-        pushHistory(key, { role: 'user', name, text: content })
+        pushHistory(key, { role: 'user', name, text: content, ...(imageUrls.length > 0 ? { images: imageUrls } : {}) })
       }
       return next()
     }
@@ -515,7 +530,10 @@ export function apply(ctx: Context, config: Config): void {
     const shareMentions = collectMentions(session, String(session.selfId))
     const replyToBot = isReplyToSelf(session, String(session.selfId))
     try {
-      const images = imageUrls.length > 0 ? await downloadImages(session, config) : []
+      const currentUrls = Array.isArray(imageUrls) ? imageUrls : []
+      const backgroundUrls = collectBackgroundImages(key).filter((url) => !currentUrls.includes(url))
+      const images = currentUrls.length > 0 ? await downloadImageUrls(currentUrls, config) : []
+      const backgroundImages = backgroundUrls.length > 0 ? await downloadImageUrls(backgroundUrls, config) : []
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), Math.max(5000, config.timeoutMs))
       timer.unref?.()
@@ -528,6 +546,7 @@ export function apply(ctx: Context, config: Config): void {
             messages,
             background,
             images,
+            backgroundImages,
             groupId: key,
             userId: String(session.userId ?? ''),
             userName: name,
@@ -543,6 +562,13 @@ export function apply(ctx: Context, config: Config): void {
         clearTimeout(timer)
       }
       const data: any = await response.json().catch(() => null)
+      if (data !== null && data.ok !== true && (data.code === 'BUSY' || data.retryable === true)) {
+        const reason = String(data.error ?? '模型服务繁忙')
+        logger.warn('AI 服务繁忙，本次不发送错误提示：%s', reason)
+        state.lastReply = { at: new Date().toISOString(), ok: false, busy: true, error: reason.slice(0, 200) }
+        persistState()
+        return
+      }
       if (data !== null && data.ok === true && data.skipped === true) {
         const reason = String(data.reason ?? '人设判断不需要回复')
         logger.info('AI 自检决定不回复：%s', reason)
@@ -565,7 +591,10 @@ export function apply(ctx: Context, config: Config): void {
       const followMs = runtime.followUpMinutes * 60 * 1000
       if (followMs > 0) followUntil.set(followKey(session), Date.now() + followMs)
       const historyTexts = Array.isArray(texts) && texts.length > 0 ? texts : [current.text]
-      for (const text of historyTexts) pushHistory(key, { role: 'user', name, text })
+      const historyImages = Array.isArray(imageUrls) ? imageUrls : []
+      historyTexts.forEach((text, index) => {
+        pushHistory(key, { role: 'user', name, text, ...(index === 0 && historyImages.length > 0 ? { images: historyImages } : {}) })
+      })
       pushHistory(key, { role: 'assistant', text: reply })
       state.lastReply = { at: new Date().toISOString(), ok: true, replyPreview: reply.slice(0, 200), followUpUntil: followUntil.get(followKey(session)) ?? null }
       persistState()
