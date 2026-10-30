@@ -7,7 +7,7 @@
  *   对某人回复后，接下来 followUpMinutes 分钟内此人的消息继续回复
  * - 支持把当前消息里的图片送给 DSH 多模态模型
  */
-import { Context, Schema, h } from 'koishi'
+import { Context, Schema } from 'koishi'
 import { mkdirSync, readFileSync, watchFile, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
@@ -161,11 +161,6 @@ export function splitReply(text: string, max: number): string[] {
   return parts.filter((part) => part !== '')
 }
 
-function hasMention(session: any, selfId: string): boolean {
-  const elements = Array.isArray(session.elements) ? session.elements : []
-  return elements.some((element: any) => element?.type === 'at' && String(element?.attrs?.id ?? '') === selfId)
-}
-
 /** 是否在回复机器人的消息（引用消息的发送者是机器人）。 */
 export function isReplyToSelf(session: any, selfId: string): boolean {
   const quote = session?.quote
@@ -177,6 +172,70 @@ export function isReplyToSelf(session: any, selfId: string): boolean {
     session?.quoteUserId,
   ]
   return candidates.some((candidate) => candidate !== undefined && candidate !== null && String(candidate) === selfId)
+}
+
+export interface MentionInfo {
+  self: boolean
+  others: string[]
+  all: boolean
+}
+
+/** Collect @ targets, distinguishing the bot itself from other people / @all. */
+export function collectMentions(session: any, selfId: string): MentionInfo {
+  const elements = Array.isArray(session?.elements) ? session.elements : []
+  const others: string[] = []
+  let self = false
+  let all = false
+  for (const element of elements) {
+    if (element?.type !== 'at') continue
+    const id = String(element?.attrs?.id ?? element?.attrs?.qq ?? '')
+    if (id === selfId) {
+      self = true
+      continue
+    }
+    if (id === 'all') {
+      all = true
+      continue
+    }
+    if (id !== '') others.push(String(element?.attrs?.name ?? id))
+  }
+  return { self, others, all }
+}
+
+/**
+ * Render a message for the model while keeping @ targets. Plain `h.select(...,
+ * 'text')` drops every at element, which is exactly why a message aimed at
+ * another person looked like it was addressed to the bot.
+ */
+export function describeSessionForModel(session: any, selfId: string): string {
+  const elements = Array.isArray(session?.elements) ? session.elements : []
+  if (elements.length === 0) return typeof session?.content === 'string' ? session.content.trim() : ''
+  const parts: string[] = []
+  for (const element of elements) {
+    const type = element?.type
+    if (type === 'text') {
+      const value = element?.attrs?.content
+      if (typeof value === 'string' && value !== '') parts.push(value)
+    } else if (type === 'at') {
+      const id = String(element?.attrs?.id ?? element?.attrs?.qq ?? '')
+      if (id === selfId) parts.push('@你')
+      else if (id === 'all') parts.push('@全体成员')
+      else parts.push(`@${String(element?.attrs?.name ?? (id || '某人'))}`)
+    } else if (type === 'img' || type === 'image') {
+      parts.push('[图片]')
+    } else if (type === 'face') {
+      parts.push('[表情]')
+    } else if (type === 'audio' || type === 'record') {
+      parts.push('[语音]')
+    } else if (type === 'video') {
+      parts.push('[视频]')
+    } else if (type === 'file') {
+      parts.push('[文件]')
+    } else if (type === 'quote' || type === 'reply') {
+      parts.push('[回复]')
+    }
+  }
+  return parts.join('').trim()
 }
 
 function senderName(session: any): string {
@@ -362,15 +421,17 @@ export function apply(ctx: Context, config: Config): void {
     if (config.groupOnly && session.isDirect === true) return next()
 
     const elements = Array.isArray(session.elements) ? session.elements : []
-    const rawText = h.select(elements, 'text').join('').trim()
-    const content = rawText !== '' ? rawText : (typeof session.content === 'string' ? session.content.trim() : '')
+    const displayContent = describeSessionForModel(session, String(session.selfId))
+    const content = displayContent !== '' ? displayContent : (typeof session.content === 'string' ? session.content.trim() : '')
     const key = keyOf(session)
     const name = senderName(session)
     const isCommand = content.startsWith('/')
     const imageUrls = collectImageUrls(session, config.imageLimit)
     const userKey = followKey(session)
     const activeBatch = batches.get(userKey)
-    if (!isCommand && activeBatch !== undefined && (content !== '' || imageUrls.length > 0)) {
+    const activeMentions = collectMentions(session, String(session.selfId))
+    const activeAddressedElsewhere = !activeMentions.self && !isReplyToSelf(session, String(session.selfId)) && (activeMentions.others.length > 0 || activeMentions.all)
+    if (!isCommand && activeBatch !== undefined && !activeAddressedElsewhere && (content !== '' || imageUrls.length > 0)) {
       if (content !== '') activeBatch.texts.push(content)
       for (const url of imageUrls) if (!activeBatch.imageUrls.includes(url)) activeBatch.imageUrls.push(url)
       activeBatch.imageUrls = activeBatch.imageUrls.slice(0, config.imageLimit)
@@ -380,15 +441,17 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
-    const mentioned = hasMention(session, String(session.selfId))
+    const mentions = collectMentions(session, String(session.selfId))
+    const mentioned = mentions.self
     const replied = isReplyToSelf(session, String(session.selfId))
     const forced = mentioned || replied
+    const addressedElsewhere = !mentioned && !replied && (mentions.others.length > 0 || mentions.all)
     const inFollowUp = (followUntil.get(followKey(session)) ?? 0) > Date.now()
     const hasContent = content !== '' || imageUrls.length > 0
     const userBusy = replyQueues.has(followKey(session))
-    const randomHit = !forced && !inFollowUp && !userBusy && hasContent && Math.random() < runtime.replyProbability
-    const shouldReply = !isCommand && hasContent && (forced || inFollowUp || userBusy || randomHit)
-    const reason = forced ? (mentioned ? 'mention' : 'reply') : inFollowUp ? 'follow-up' : userBusy ? 'queued' : randomHit ? 'probability' : 'none'
+    const randomHit = !forced && !addressedElsewhere && !inFollowUp && !userBusy && hasContent && Math.random() < runtime.replyProbability
+    const shouldReply = !isCommand && hasContent && !addressedElsewhere && (forced || inFollowUp || userBusy || randomHit)
+    const reason = addressedElsewhere ? 'addressed-elsewhere' : forced ? (mentioned ? 'mention' : 'reply') : inFollowUp ? 'follow-up' : userBusy ? 'queued' : randomHit ? 'probability' : 'none'
 
     state.lastInbound = {
       at: new Date().toISOString(),
@@ -397,6 +460,9 @@ export function apply(ctx: Context, config: Config): void {
       sender: name,
       text: content.slice(0, 200),
       mention: mentioned,
+      mentions: mentions.others,
+      mentionAll: mentions.all,
+      addressedElsewhere,
       replyToBot: replied,
       followUp: inFollowUp,
       images: imageUrls.length,

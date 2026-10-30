@@ -275,3 +275,45 @@ test('运行时设置可以热切换批量窗口', async (t) => {
   assert.match(calls[0].body.messages[0].text, /批量第一条/u)
   assert.match(calls[0].body.messages[0].text, /批量第二条/u)
 })
+
+
+test('collectMentions / describeSessionForModel：区分 @自己、@别人、@全体', () => {
+  const session = {
+    selfId: SELF_ID,
+    elements: [
+      { type: 'at', attrs: { id: '999', name: '小明' } },
+      { type: 'text', attrs: { content: ' 你好' } },
+    ],
+  }
+  assert.deepEqual(aiChat.collectMentions(session, SELF_ID), { self: false, others: ['小明'], all: false })
+  assert.equal(aiChat.describeSessionForModel(session, SELF_ID), '@小明 你好')
+  const selfSession = { selfId: SELF_ID, elements: [{ type: 'at', attrs: { id: SELF_ID } }, { type: 'text', attrs: { content: ' 在吗' } }] }
+  assert.equal(aiChat.collectMentions(selfSession, SELF_ID).self, true)
+  assert.equal(aiChat.describeSessionForModel(selfSession, SELF_ID), '@你 在吗')
+  const allSession = { selfId: SELF_ID, elements: [{ type: 'at', attrs: { id: 'all' } }] }
+  assert.equal(aiChat.collectMentions(allSession, SELF_ID).all, true)
+  assert.equal(aiChat.describeSessionForModel(allSession, SELF_ID), '@全体成员')
+})
+
+test('@别人且没有 @机器人 时不触发回复', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1 })
+  const replies = await app.mock.client(USER, GROUP).receive('<at id="999" name="小明"/> 晚上开黑吗')
+  assert.deepEqual(replies, [])
+  assert.equal(calls.length, 0)
+})
+
+test('@全体成员不会触发概率回复', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1 })
+  const replies = await app.mock.client(USER, GROUP).receive('<at id="all"/> 大家晚上好')
+  assert.deepEqual(replies, [])
+  assert.equal(calls.length, 0)
+})
+
+test('跟进窗口内 @别人 也不会插话', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 0, followUpMinutes: 3 })
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
+  assert.equal(calls.length, 1)
+  const other = await app.mock.client(USER, GROUP).receive('<at id="999" name="小明"/> 你晚上来吗')
+  assert.deepEqual(other, [])
+  assert.equal(calls.length, 1)
+})
