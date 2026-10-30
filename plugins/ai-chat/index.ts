@@ -239,6 +239,28 @@ export function describeSessionForModel(session: any, selfId: string): string {
   return parts.join('').trim()
 }
 
+export interface QuoteInfo {
+  userName: string
+  text: string
+  imageUrls: string[]
+  fromSelf: boolean
+}
+
+/** Read the message the current message is replying to (OneBot quote). */
+export function extractQuote(session: any, selfId: string, imageLimit: number): QuoteInfo | null {
+  const raw = session?.quote
+  if (raw === null || raw === undefined) return null
+  const quote = typeof raw === 'string' ? { content: raw } : raw
+  const elements = Array.isArray(quote.elements) ? quote.elements : []
+  const text = describeSessionForModel({ elements, content: quote.content }, selfId).trim()
+  const imageUrls = collectImageUrls({ elements, content: quote.content }, Math.max(0, imageLimit))
+  const user = quote.user ?? quote.author ?? null
+  const userId = String(user?.id ?? quote.userId ?? '')
+  const userName = String(user?.name ?? user?.nickname ?? quote.userName ?? userId ?? '某人')
+  if (text === '' && imageUrls.length === 0) return null
+  return { userName, text, imageUrls, fromSelf: userId !== '' && userId === selfId }
+}
+
 function senderName(session: any): string {
   return String(session?.author?.name ?? session?.username ?? session?.userId ?? '群友')
 }
@@ -531,9 +553,12 @@ export function apply(ctx: Context, config: Config): void {
     const replyToBot = isReplyToSelf(session, String(session.selfId))
     try {
       const currentUrls = Array.isArray(imageUrls) ? imageUrls : []
-      const backgroundUrls = collectBackgroundImages(key).filter((url) => !currentUrls.includes(url))
+      const quote = extractQuote(session, String(session.selfId), config.imageLimit)
+      const backgroundUrls = collectBackgroundImages(key).filter((url) => !currentUrls.includes(url) && !(quote?.imageUrls ?? []).includes(url))
       const images = currentUrls.length > 0 ? await downloadImageUrls(currentUrls, config) : []
       const backgroundImages = backgroundUrls.length > 0 ? await downloadImageUrls(backgroundUrls, config) : []
+      const quotedUrls = (quote?.imageUrls ?? []).filter((url) => !currentUrls.includes(url))
+      const quotedImages = quotedUrls.length > 0 ? await downloadImageUrls(quotedUrls, config) : []
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), Math.max(5000, config.timeoutMs))
       timer.unref?.()
@@ -547,6 +572,13 @@ export function apply(ctx: Context, config: Config): void {
             background,
             images,
             backgroundImages,
+            quotedImages,
+            quote: quote === null ? null : {
+              userName: quote.userName,
+              text: quote.text,
+              fromSelf: quote.fromSelf,
+              imageCount: quotedImages.length,
+            },
             groupId: key,
             userId: String(session.userId ?? ''),
             userName: name,

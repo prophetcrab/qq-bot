@@ -361,3 +361,23 @@ test('背景里别人发过的图片会作为 backgroundImages 一起发送', as
   assert.equal(calls[0].body.backgroundImages[0].mediaType, 'image/png')
   assert.equal(calls[0].body.images.length, 0)
 })
+
+
+test('extractQuote：提取被引用消息的文字/图片/发送者', () => {
+  const session = {
+    selfId: SELF_ID,
+    quote: {
+      user: { id: '999', name: '小明' },
+      elements: [
+        { type: 'text', attrs: { content: '这张图好看吗' } },
+        { type: 'img', attrs: { src: IMAGE_URL } },
+      ],
+    },
+  }
+  const quote = aiChat.extractQuote(session, SELF_ID, 4)
+  assert.equal(quote.userName, '小明')
+  assert.equal(quote.text, '这张图好看吗[图片]')
+  assert.deepEqual(quote.imageUrls, [IMAGE_URL])
+  assert.equal(quote.fromSelf, false)
+  assert.equal(aiChat.extractQuote({ selfId: SELF_ID }, SELF_ID, 4), null)
+})
