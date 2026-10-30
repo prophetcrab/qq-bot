@@ -56,6 +56,7 @@ async function setup(t: TestContext, config: Record<string, any> = {}, runtimeSe
     settingsFile,
     stateFile: join(dir, 'ai-chat-state.json'),
     replyProbability: 0,
+    batchWindowMs: 0,
     ...config,
   })
   await app.start()
@@ -76,10 +77,11 @@ test('群消息进入上下文，@机器人 触发时把背景 + 当前消息发
   assert.equal(calls.length, 1)
   assert.match(calls[0].url, /\/qqbot\/ai\/chat/u)
   const sent = calls[0].body.messages
-  assert.ok(sent.some((m: any) => m.text.includes('[背景]') && m.text.includes('今天天气不错')))
-  assert.ok(sent.some((m: any) => m.text.includes('你们在聊什么')))
-  assert.ok(sent.at(-1).text.startsWith('[当前消息]'))
-  assert.ok(sent.at(-1).text.includes('总结一下'))
+  assert.equal(sent.length, 1)
+  assert.ok(sent[0].text.includes('总结一下'))
+  assert.ok(!sent[0].text.includes('[背景]'))
+  assert.match(calls[0].body.background, /今天天气不错/u)
+  assert.match(calls[0].body.background, /你们在聊什么/u)
   assert.equal(calls[0].body.groupId, GROUP)
   assert.equal(calls[0].body.userId, USER)
   assert.equal(typeof calls[0].body.userName, 'string')
@@ -104,7 +106,7 @@ test('概率为 1 时普通消息自动回复', async (t) => {
   const replies = await app.mock.client(USER, GROUP).receive('今天群里好热闹')
   assert.deepEqual(replies, ['这是 AI 的回复'])
   assert.equal(calls.length, 1)
-  assert.ok(calls[0].body.messages.at(-1).text.includes('今天群里好热闹'))
+  assert.ok(calls[0].body.messages[0].text.includes('今天群里好热闹'))
 })
 
 test('回复某人后，3 分钟内继续回复此人的消息', async (t) => {
@@ -134,10 +136,13 @@ test('最多只把最近 100 条背景消息发给 DSH', async (t) => {
   await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 只看当前这条`)
   assert.equal(calls.length, 1)
   const messages = calls[0].body.messages
-  assert.equal(messages.length, 101)
-  assert.ok(messages[0].text.includes('背景消息 5'))
-  assert.ok(messages.at(-1).text.startsWith('[当前消息]'))
-  assert.ok(messages.at(-1).text.includes('只看当前这条'))
+  assert.equal(messages.length, 1)
+  assert.ok(messages[0].text.includes('只看当前这条'))
+  const background = calls[0].body.background
+  assert.ok(background.includes('背景消息 5'))
+  assert.ok(!background.includes('背景消息 0'))
+  assert.ok(background.includes('背景消息 104'))
+  assert.equal(background.split('\n').length, 100)
 })
 
 test('当前消息带图片时把图片数据一起发给 DSH', async (t) => {
@@ -213,4 +218,45 @@ test('面板写入的运行时设置优先于 koishi.yml 配置', async (t) => {
   const replies = await app.mock.client(USER, GROUP).receive('设置文件触发的消息')
   assert.deepEqual(replies, ['这是 AI 的回复'])
   assert.equal(calls.length, 1)
+})
+
+
+test('sanitizeReplyText: 清掉回复开头的上下文标签', () => {
+  assert.equal(aiChat.sanitizeReplyText('[背景] AI：你好'), '你好')
+  assert.equal(aiChat.sanitizeReplyText('[当前消息] 小明：你好'), '你好')
+  assert.equal(aiChat.sanitizeReplyText('正常回复 [图片]'), '正常回复 [图片]')
+})
+
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+test('同一个人连续消息合并为一次回复（批量窗口）', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1, batchWindowMs: 80, batchMaxWaitMs: 300 })
+  await app.mock.client(USER, GROUP).receive('第一句')
+  await app.mock.client(USER, GROUP).receive('第二句')
+  await app.mock.client(USER, GROUP).receive('第三句')
+  await sleep(180)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].body.messages[0].text, /第一句/u)
+  assert.match(calls[0].body.messages[0].text, /第二句/u)
+  assert.match(calls[0].body.messages[0].text, /第三句/u)
+})
+
+test('@触发后连续补充消息也只回复一次', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 0, batchWindowMs: 80, batchMaxWaitMs: 300 })
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
+  await app.mock.client(USER, GROUP).receive('第二句补充')
+  await sleep(180)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].body.messages[0].text, /第二句补充/u)
+})
+
+test('不同人的批量消息互不合并', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1, batchWindowMs: 80, batchMaxWaitMs: 300 })
+  await app.mock.client(USER, GROUP).receive('A 的消息')
+  await app.mock.client(USER_B, GROUP).receive('B 的消息')
+  await sleep(180)
+  assert.equal(calls.length, 2)
 })

@@ -44,6 +44,8 @@ plugins:
       replyProbability: 0.15
       followUpMinutes: 3
       historyLimit: 100
+      batchWindowMs: 2500
+      batchMaxWaitMs: 10000
     ./plugins/welcome:1g2s5g:
       message: 欢迎加入本群，发送 /help 查看机器人指令～
       onlyGroup: true

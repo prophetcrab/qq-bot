@@ -52,6 +52,7 @@ qq-bot/
 - **@机器人** 或 **回复机器人**：必定回复
 - 其他消息：按 `replyProbability` 概率回复
 - 对某人回复后 3 分钟内继续回复此人（`followUpMinutes`）
+- 同一人连续多条消息按 `batchWindowMs` 合并为一次回复
 - 当前消息图片会送多模态模型
 - 不同人的消息并发处理；同一个人的连续消息静默排队，不发送「上一条还在处理」提示
 - 每个人按 QQ 号维护长期画像，由 DSH 作为系统提示词第二段注入
@@ -61,6 +62,8 @@ qq-bot/
   replyProbability: 0.15
   followUpMinutes: 3
   historyLimit: 100
+  batchWindowMs: 2500
+  batchMaxWaitMs: 10000
 ```
 
 DSH 端会把 `data/ai.json`（端点、provider、model）写好，插件自动读取；DSH 端口变化后自动更新。人设卡在 DSH 面板编辑，保存为 `data/persona.json`；人物画像保存在 `data/profiles.json`。面板「AI」页的回复设置写入 `data/ai-settings.json`，插件热加载，无需重启。
