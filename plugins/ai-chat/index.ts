@@ -543,6 +543,15 @@ export function apply(ctx: Context, config: Config): void {
         clearTimeout(timer)
       }
       const data: any = await response.json().catch(() => null)
+      if (data !== null && data.ok === true && data.skipped === true) {
+        const reason = String(data.reason ?? '人设判断不需要回复')
+        logger.info('AI 自检决定不回复：%s', reason)
+        const historyTexts = Array.isArray(texts) && texts.length > 0 ? texts : [current.text]
+        for (const text of historyTexts) pushHistory(key, { role: 'user', name, text })
+        state.lastReply = { at: new Date().toISOString(), ok: true, skipped: true, reason: reason.slice(0, 200) }
+        persistState()
+        return
+      }
       if (data === null || data.ok !== true || typeof data.reply !== 'string') {
         const error = String(data?.error ?? `HTTP ${response.status}`)
         logger.warn('AI 回复失败：%s', error)

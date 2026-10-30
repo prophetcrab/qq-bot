@@ -322,3 +322,16 @@ test('跟进窗口内 @别人 仍然继续回复', async (t) => {
   assert.equal(calls.length, 2)
   assert.deepEqual(calls[1].body.mentionOthers, ['小明'])
 })
+
+
+test('AI 自检决定不回复时保持安静', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 1 })
+  globalThis.fetch = (async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, skipped: true, reason: '人设判断这句话不需要接' }),
+  })) as any
+  const replies = await app.mock.client(USER, GROUP).receive('今天他们聊得真热闹')
+  assert.deepEqual(replies, [])
+  assert.equal(calls.length, 0)
+})
