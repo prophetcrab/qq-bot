@@ -260,3 +260,18 @@ test('不同人的批量消息互不合并', async (t) => {
   await sleep(180)
   assert.equal(calls.length, 2)
 })
+
+
+test('运行时设置可以热切换批量窗口', async (t) => {
+  const { app, calls } = await setup(
+    t,
+    { replyProbability: 1, batchWindowMs: 0, batchMaxWaitMs: 0 },
+    { replyProbability: 1, followUpMinutes: 3, historyLimit: 100, batchWindowMs: 80, batchMaxWaitMs: 300 },
+  )
+  await app.mock.client(USER, GROUP).receive('批量第一条')
+  await app.mock.client(USER, GROUP).receive('批量第二条')
+  await sleep(180)
+  assert.equal(calls.length, 1)
+  assert.match(calls[0].body.messages[0].text, /批量第一条/u)
+  assert.match(calls[0].body.messages[0].text, /批量第二条/u)
+})

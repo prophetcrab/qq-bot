@@ -82,6 +82,8 @@ interface RuntimeSettings {
   replyProbability: number
   followUpMinutes: number
   historyLimit: number
+  batchWindowMs: number
+  batchMaxWaitMs: number
 }
 
 function clampNumber(value: any, fallback: number, min: number, max: number, truncate = false): number {
@@ -97,6 +99,8 @@ function loadRuntimeSettings(file: string, config: Config): RuntimeSettings {
     replyProbability: clampNumber(config.replyProbability, 0.15, 0, 1),
     followUpMinutes: clampNumber(config.followUpMinutes, 3, 0, 60, true),
     historyLimit: clampNumber(config.historyLimit, 100, 0, 200, true),
+    batchWindowMs: clampNumber(config.batchWindowMs, 2500, 0, 10000, true),
+    batchMaxWaitMs: clampNumber(config.batchMaxWaitMs, 10000, 0, 30000, true),
   }
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8'))
@@ -106,6 +110,11 @@ function loadRuntimeSettings(file: string, config: Config): RuntimeSettings {
       replyProbability: clampNumber(parsed.replyProbability, fallback.replyProbability, 0, 1),
       followUpMinutes: clampNumber(parsed.followUpMinutes, fallback.followUpMinutes, 0, 60, true),
       historyLimit: clampNumber(parsed.historyLimit, fallback.historyLimit, 0, 200, true),
+      batchWindowMs: clampNumber(parsed.batchWindowMs, fallback.batchWindowMs, 0, 10000, true),
+      batchMaxWaitMs: Math.max(
+        clampNumber(parsed.batchWindowMs, fallback.batchWindowMs, 0, 10000, true),
+        clampNumber(parsed.batchMaxWaitMs, fallback.batchMaxWaitMs, 0, 30000, true),
+      ),
     }
   } catch {
     return fallback
@@ -249,7 +258,15 @@ export function apply(ctx: Context, config: Config): void {
   let discovery: Discovery | null = readDiscovery(discoveryPath)
   let runtime = loadRuntimeSettings(settingsPath, config)
 
-  const state: any = { replyProbability: runtime.replyProbability, followUpMinutes: runtime.followUpMinutes, lastInbound: null, lastReply: null, updatedAt: null }
+  const state: any = {
+    replyProbability: runtime.replyProbability,
+    followUpMinutes: runtime.followUpMinutes,
+    batchWindowMs: runtime.batchWindowMs,
+    batchMaxWaitMs: runtime.batchMaxWaitMs,
+    lastInbound: null,
+    lastReply: null,
+    updatedAt: null,
+  }
   const persistState = (): void => {
     try {
       state.updatedAt = new Date().toISOString()
@@ -263,7 +280,7 @@ export function apply(ctx: Context, config: Config): void {
   try {
     watchFile(settingsPath, { interval: 1000 }, () => {
       runtime = loadRuntimeSettings(settingsPath, config)
-      logger.info('AI 回复设置已更新：概率 %s / 跟进 %s 分钟 / 上下文 %s 条', runtime.replyProbability, runtime.followUpMinutes, runtime.historyLimit)
+      logger.info('AI 回复设置已更新：概率 %s / 跟进 %s 分钟 / 上下文 %s 条 / 合并 %s–%s ms', runtime.replyProbability, runtime.followUpMinutes, runtime.historyLimit, runtime.batchWindowMs, runtime.batchMaxWaitMs)
     }).unref?.()
   } catch {
     // ignore
@@ -310,8 +327,8 @@ export function apply(ctx: Context, config: Config): void {
     if (batch === undefined) return
     clearTimeout(batch.timer)
     const now = Date.now()
-    const windowMs = Math.max(0, Number(config.batchWindowMs) || 0)
-    const maxWaitMs = Math.max(windowMs, Number(config.batchMaxWaitMs) || 0)
+    const windowMs = Math.max(0, runtime.batchWindowMs)
+    const maxWaitMs = Math.max(windowMs, runtime.batchMaxWaitMs)
     const deadline = Math.min(now + windowMs, batch.firstAt + maxWaitMs)
     if (deadline <= now) {
       flushBatch(userKey)
@@ -396,7 +413,7 @@ export function apply(ctx: Context, config: Config): void {
       return next()
     }
 
-    if (Math.max(0, Number(config.batchWindowMs) || 0) > 0) {
+    if (runtime.batchWindowMs > 0) {
       batches.set(userKey, {
         texts: content !== '' ? [content] : [],
         imageUrls: [...imageUrls],
