@@ -1,0 +1,42 @@
+{
+  "name": "qq-bot",
+  "version": "0.1.0",
+  "description": "基于 Koishi 的高扩展性 QQ 机器人框架（OneBot 11 / QQ 官方机器人）",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "koishi start -r tsx/cjs",
+    "start": "koishi start -r tsx/cjs",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "mock:qq": "node scripts/fake-onebot-client.mjs",
+    "check": "npm run typecheck && npm test",
+    "set:self-id": "node scripts/set-self-id.mjs"
+  },
+  "dependencies": {
+    "@koishijs/plugin-adapter-qq": "^4.14.0",
+    "@koishijs/plugin-config": "^2.8.6",
+    "@koishijs/plugin-console": "^5.30.11",
+    "@koishijs/plugin-database-sqlite": "^4.7.0",
+    "@koishijs/plugin-help": "^2.4.5",
+    "@koishijs/plugin-http": "^0.6.3",
+    "@koishijs/plugin-logger": "^2.6.9",
+    "@koishijs/plugin-market": "^2.11.4",
+    "@koishijs/plugin-proxy-agent": "^0.3.3",
+    "@koishijs/plugin-sandbox": "^3.4.1",
+    "@koishijs/plugin-server": "^3.2.4",
+    "koishi": "^4.18.11",
+    "koishi-plugin-adapter-onebot": "^6.9.5",
+    "tsx": "^4.16.2"
+  },
+  "devDependencies": {
+    "@koishijs/plugin-mock": "^2.6.6",
+    "@types/node": "^22.7.5",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.6.2",
+    "ws": "^8.18.3"
+  }
+}

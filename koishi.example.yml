@@ -1,0 +1,94 @@
+# qq-bot 配置参考（带注释）
+#
+# 注意：真正生效的是同目录下的 koishi.yml。
+# Koishi Loader 启动时会自动为插件补全实例 id 并重排 YAML，且不会保留注释，
+# 因此本文件仅作为带注释的参考，不会被加载。修改配置请改 koishi.yml。
+#
+# 插件 key 规则：
+#   server        -> @koishijs/plugin-server
+#   logger        -> @koishijs/plugin-logger
+#   database-sqlite -> @koishijs/plugin-database-sqlite
+#   adapter-onebot  -> koishi-plugin-adapter-onebot
+#   adapter-qq      -> @koishijs/plugin-adapter-qq
+#   ./plugins/xxx   -> 项目内的本地插件（相对路径）
+#   ~ 前缀           -> 禁用该插件
+
+# 指令前缀。Koishi 默认是 ['']（无前缀），这里改成 QQ 群常用的 '/'
+prefix: ['/']
+
+plugins:
+  # ── HTTP / WebSocket 服务器（控制台、反向 WS、Webhook 都依赖它）──
+  group:server:
+    server:
+      port: 5140
+      maxPort: 5149
+
+  # ── 基础能力 ──
+  group:basic:
+    logger: {} # 日志（控制台「日志」页）
+    http: {} # HTTP 服务（适配器、市场、图片下载等依赖）
+    help: {} # /help 指令
+
+  # ── 数据存储 ──
+  group:storage:
+    database-sqlite:
+      path: data/koishi.db
+
+  # ── Web 控制台 ──
+  group:console:
+    console:
+      open: false # 是否自动打开浏览器
+    sandbox: {} # 控制台内的沙盒调试
+    config: {} # 控制台内可视化编辑插件配置
+    # 插件市场：需要能访问 registry.koishi.chat，网络受限时保持禁用
+    ~market:
+      search:
+        endpoint: https://registry.koishi.chat/index.json
+
+  # ── QQ 连接层：按需启用 ──
+  group:adapter:
+    # 个人 QQ（推荐）：OneBot 11 反向 WebSocket
+    # NapCat：网络配置 → 新建「WebSocket 客户端」→ ws://127.0.0.1:5140/onebot
+    adapter-onebot:
+      selfId: '10000' # ← 必须改成你的机器人 QQ 号
+      protocol: ws-reverse # ws-reverse | ws | http
+      path: /onebot # 仅 ws-reverse / http 使用
+      # token: ''     # 与 OneBot 的 access_token 一致（可选）
+
+      # 正向 WS（由 Koishi 连接 NapCat 的「WebSocket 服务器」）：
+      # 把上面两行换成：
+      # protocol: ws
+      # endpoint: ws://127.0.0.1:3001
+      #
+      # HTTP（由 OneBot POST 事件到 Koishi，Koishi 调用 OneBot HTTP API）：
+      # protocol: http
+      # endpoint: http://127.0.0.1:3001   # OneBot HTTP API 地址
+      # path: /onebot                     # 接收事件上报的路径
+
+    # QQ 官方机器人（q.qq.com 创建，需要 id + secret）
+    ~adapter-qq:
+      id: YOUR_APP_ID
+      secret: YOUR_APP_SECRET
+      type: private # public | private
+      sandbox: true # 沙盒环境
+      protocol: websocket # websocket | webhook
+      # intents: 50331648 # USER_MESSAGE | GROUP_MEMBERS
+      # path: /qq         # webhook 模式下的回调路径
+
+  # ── 本地插件 ──
+  group:local:
+    ./plugins/core:
+      logMessages: true # 是否打印收到的消息
+      statusCommand: true # 是否注册 /qqbot.status
+      adminUsers: [] # 管理员 QQ 号，留空不限制
+    ./plugins/echo:
+      keyword: ping # 中间件示例关键词
+      reply: pong
+    ./plugins/welcome:
+      message: 欢迎加入本群，发送 /help 查看机器人指令～
+      onlyGroup: true
+    # 群/私聊收发权限过滤：策略文件 data/access.json（可被 DSH 权限页管理）
+    ./plugins/access-control:
+      storagePath: data/access.json
+      logBlocked: false
+      quietPrefixes: ['/']

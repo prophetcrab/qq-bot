@@ -1,0 +1,10 @@
+node_modules
+data/*
+!data/.gitkeep
+runtime/
+logs/
+*.db
+*.db-journal
+*.log
+.DS_Store
+.tsbuildinfo

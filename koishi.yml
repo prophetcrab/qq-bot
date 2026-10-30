@@ -1,0 +1,49 @@
+prefix:
+  - /
+plugins:
+  group:server:
+    server:sn8oqx:
+      port: 5140
+      maxPort: 5149
+  group:basic:
+    logger:cpi4w9: {}
+    http:vrzkih: {}
+    help:ss74sj: {}
+  group:storage:
+    database-sqlite:04sj84:
+      path: data/koishi.db
+  group:console:
+    console:ortt43:
+      open: false
+    sandbox:gnrjjd: {}
+    config:1avhyg: {}
+    ~market:jgwg4c:
+      search:
+        endpoint: https://registry.koishi.chat/index.json
+  group:adapter:
+    adapter-onebot:rwzua8:
+      selfId: '676512192'
+      protocol: ws-reverse
+      path: /onebot
+    ~adapter-qq:opsrjg:
+      id: YOUR_APP_ID
+      secret: YOUR_APP_SECRET
+      type: private
+      sandbox: true
+      protocol: websocket
+  group:local:
+    ./plugins/core:orq22s:
+      logMessages: true
+      adminUsers: []
+    ./plugins/health:d8vb7s: {}
+    ./plugins/echo:m9a6fn:
+      keyword: ping
+      reply: pong
+    ./plugins/access-control:syf56t: {}
+    ./plugins/ai-chat:ai7k2m:
+      replyProbability: 0.15
+      followUpMinutes: 3
+      historyLimit: 100
+    ./plugins/welcome:1g2s5g:
+      message: 欢迎加入本群，发送 /help 查看机器人指令～
+      onlyGroup: true
