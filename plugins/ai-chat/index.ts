@@ -1,340 +1,32 @@
 /**
- * AI 群聊插件。
+ * AI 群聊插件（编排入口）。
  *
- * - 每个 (群, QQ) 的长期画像由 DSH 侧维护并在系统提示词第二段注入
- * - 群聊最近最多 100 条作为背景上下文；只针对当前消息回复
- * - 触发规则：@机器人 / 回复机器人 必定触发；否则按 replyProbability 随机；
- *   对某人回复后，接下来 followUpMinutes 分钟内此人的消息继续回复
- * - 支持把当前消息里的图片送给 DSH 多模态模型
+ * 触发策略、上下文、媒体下载、DSH HTTP 网关、发送策略分别位于同级模块。
  */
-import { Context, Schema } from 'koishi'
-import { mkdirSync, readFileSync, watchFile, writeFileSync } from 'node:fs'
+import { Context } from 'koishi'
+import { mkdirSync, watchFile, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { loadRuntimeSettings, readDiscovery } from './config.js'
+import type { Config } from './config.js'
+import { sanitizeReplyText, splitReply } from './delivery.js'
+import { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf, senderName } from './message.js'
+import { collectImageUrls, downloadImageUrls } from './media.js'
+import { postAi } from './gateway.js'
+import type { AiPayload } from './gateway.js'
+import type { HistoryMessage, PendingBatch } from './types.js'
+
+export { Config } from './config.js'
+export { sanitizeReplyText, splitReply } from './delivery.js'
+export { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf } from './message.js'
+export { collectImageUrls, downloadImageUrls, downloadImages } from './media.js'
 
 export const name = 'ai-chat'
 export const inject: string[] = []
-
-export interface Config {
-  enabled: boolean
-  replyProbability: number
-  followUpMinutes: number
-  batchWindowMs: number
-  batchMaxWaitMs: number
-  groupOnly: boolean
-  historyLimit: number
-  maxReplyChars: number
-  timeoutMs: number
-  endpoint: string
-  discoveryFile: string
-  stateFile: string
-  settingsFile: string
-  systemPrompt: string
-  imageLimit: number
-  imageMaxBytes: number
-}
-
-export const Config: Schema<Config> = Schema.object({
-  enabled: Schema.boolean().default(true).description('是否启用 AI 聊天'),
-  replyProbability: Schema.number().default(0.15).min(0).max(1)
-    .description('未被 @ / 回复 时的随机回复概率（0~1）'),
-  followUpMinutes: Schema.number().default(3).min(0).max(60)
-    .description('回复某人后，多少分钟内继续回复此人的消息'),
-  batchWindowMs: Schema.number().default(2500).min(0).max(10000)
-    .description('同一个人连续消息的合并等待时间（毫秒），0 表示不合并'),
-  batchMaxWaitMs: Schema.number().default(10000).min(0).max(30000)
-    .description('连续消息最多等待多久就必须回复一次（毫秒）'),
-  groupOnly: Schema.boolean().default(true).description('是否只处理群聊'),
-  historyLimit: Schema.number().default(100).min(0).max(200)
-    .description('向上保留并发送的群聊背景消息条数（最多 100 条）'),
-  maxReplyChars: Schema.number().default(1200).min(100).max(4000)
-    .description('单条回复最大字符数（超长自动分条）'),
-  timeoutMs: Schema.number().default(120000).min(5000).max(600000)
-    .description('调用 DSH AI 桥的超时时间'),
-  endpoint: Schema.string().default('').description('DSH AI 桥地址；留空则读取 discoveryFile'),
-  discoveryFile: Schema.string().default('data/ai.json').description('DSH 写入的 AI 桥发现文件（相对项目根目录）'),
-  stateFile: Schema.string().default('data/ai-chat-state.json').description('AI 监听/回复诊断状态文件（相对项目根目录）'),
-  settingsFile: Schema.string().default('data/ai-settings.json').description('DSH 面板写入的运行时回复设置（概率/跟进/上下文）'),
-  systemPrompt: Schema.string().default('').description('额外系统提示词；留空使用 DSH 侧默认'),
-  imageLimit: Schema.number().default(4).min(0).max(6).description('每条消息最多读取的图片数'),
-  imageMaxBytes: Schema.number().default(6 * 1024 * 1024).min(1024 * 1024).max(10 * 1024 * 1024)
-    .description('单张图片最大字节数'),
-})
-
-interface HistoryMessage {
-  role: 'user' | 'assistant'
-  name?: string
-  text: string
-  images?: string[]
-}
-
-interface Discovery {
-  endpoint?: string
-  provider?: string
-  model?: string
-}
-
-interface InboundImage {
-  mediaType: string
-  data: string
-}
-
-interface RuntimeSettings {
-  enabled: boolean
-  replyProbability: number
-  followUpMinutes: number
-  historyLimit: number
-  batchWindowMs: number
-  batchMaxWaitMs: number
-}
-
-function clampNumber(value: any, fallback: number, min: number, max: number, truncate = false): number {
-  const number = Number(value)
-  if (!Number.isFinite(number)) return fallback
-  const bounded = Math.min(max, Math.max(min, number))
-  return truncate ? Math.trunc(bounded) : Math.round(bounded * 1000) / 1000
-}
-
-function loadRuntimeSettings(file: string, config: Config): RuntimeSettings {
-  const fallback: RuntimeSettings = {
-    enabled: config.enabled,
-    replyProbability: clampNumber(config.replyProbability, 0.15, 0, 1),
-    followUpMinutes: clampNumber(config.followUpMinutes, 3, 0, 60, true),
-    historyLimit: clampNumber(config.historyLimit, 100, 0, 200, true),
-    batchWindowMs: clampNumber(config.batchWindowMs, 2500, 0, 10000, true),
-    batchMaxWaitMs: clampNumber(config.batchMaxWaitMs, 10000, 0, 30000, true),
-  }
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'))
-    if (parsed === null || typeof parsed !== 'object') return fallback
-    return {
-      enabled: parsed.enabled === undefined ? fallback.enabled : parsed.enabled === true,
-      replyProbability: clampNumber(parsed.replyProbability, fallback.replyProbability, 0, 1),
-      followUpMinutes: clampNumber(parsed.followUpMinutes, fallback.followUpMinutes, 0, 60, true),
-      historyLimit: clampNumber(parsed.historyLimit, fallback.historyLimit, 0, 200, true),
-      batchWindowMs: clampNumber(parsed.batchWindowMs, fallback.batchWindowMs, 0, 10000, true),
-      batchMaxWaitMs: Math.max(
-        clampNumber(parsed.batchWindowMs, fallback.batchWindowMs, 0, 10000, true),
-        clampNumber(parsed.batchMaxWaitMs, fallback.batchMaxWaitMs, 0, 30000, true),
-      ),
-    }
-  } catch {
-    return fallback
-  }
-}
-
-function readDiscovery(file: string): Discovery | null {
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'))
-    if (parsed !== null && typeof parsed === 'object' && typeof parsed.endpoint === 'string' && parsed.endpoint !== '') {
-      return {
-        endpoint: parsed.endpoint,
-        provider: typeof parsed.provider === 'string' ? parsed.provider : undefined,
-        model: typeof parsed.model === 'string' ? parsed.model : undefined,
-      }
-    }
-  } catch {
-    // file missing / not yet written
-  }
-  return null
-}
-
-/** 按长度/换行把长回复拆成 QQ 可发送的片段。 */
-/** Remove leaked context labels from a reply (defense in depth beside the host sanitizer). */
-export function sanitizeReplyText(text: string): string {
-  return String(text ?? '')
-    .replace(/^\s*[\[【](?:背景|当前消息|群聊背景|历史|上下文)[\]】]\s*(?:AI|[^：\n]{0,40})?\s*[:：]?\s*/u, '')
-    .replace(/[\[【]\s*(?:背景|当前消息|群聊背景|最近群聊背景|历史|上下文)\s*[\]】]/gu, '')
-    .replace(/^\s*AI\s*[:：]\s*/u, '')
-    .trim()
-}
-
-export function splitReply(text: string, max: number): string[] {
-  const limit = Math.max(100, Math.trunc(max))
-  const parts: string[] = []
-  let rest = text.trim()
-  while (rest.length > limit) {
-    let cut = rest.lastIndexOf('\n', limit)
-    if (cut < limit * 0.5) cut = limit
-    parts.push(rest.slice(0, cut).trim())
-    rest = rest.slice(cut).replace(/^\n+/u, '')
-  }
-  if (rest !== '') parts.push(rest)
-  return parts.filter((part) => part !== '')
-}
-
-/** 是否在回复机器人的消息（引用消息的发送者是机器人）。 */
-export function isReplyToSelf(session: any, selfId: string): boolean {
-  const quote = session?.quote
-  const candidates = [
-    quote?.user?.id,
-    quote?.userId,
-    quote?.author?.id,
-    quote?.member?.user?.id,
-    session?.quoteUserId,
-  ]
-  return candidates.some((candidate) => candidate !== undefined && candidate !== null && String(candidate) === selfId)
-}
-
-export interface MentionInfo {
-  self: boolean
-  others: string[]
-  all: boolean
-}
-
-/** Collect @ targets, distinguishing the bot itself from other people / @all. */
-export function collectMentions(session: any, selfId: string): MentionInfo {
-  const elements = Array.isArray(session?.elements) ? session.elements : []
-  const others: string[] = []
-  let self = false
-  let all = false
-  for (const element of elements) {
-    if (element?.type !== 'at') continue
-    const id = String(element?.attrs?.id ?? element?.attrs?.qq ?? '')
-    if (id === selfId) {
-      self = true
-      continue
-    }
-    if (id === 'all') {
-      all = true
-      continue
-    }
-    if (id !== '') others.push(String(element?.attrs?.name ?? id))
-  }
-  return { self, others, all }
-}
-
-/**
- * Render a message for the model while keeping @ targets. Plain `h.select(...,
- * 'text')` drops every at element, which is exactly why a message aimed at
- * another person looked like it was addressed to the bot.
- */
-export function describeSessionForModel(session: any, selfId: string): string {
-  const elements = Array.isArray(session?.elements) ? session.elements : []
-  if (elements.length === 0) return typeof session?.content === 'string' ? session.content.trim() : ''
-  const parts: string[] = []
-  for (const element of elements) {
-    const type = element?.type
-    if (type === 'text') {
-      const value = element?.attrs?.content
-      if (typeof value === 'string' && value !== '') parts.push(value)
-    } else if (type === 'at') {
-      const id = String(element?.attrs?.id ?? element?.attrs?.qq ?? '')
-      if (id === selfId) parts.push('@你')
-      else if (id === 'all') parts.push('@全体成员')
-      else parts.push(`@${String(element?.attrs?.name ?? (id || '某人'))}`)
-    } else if (type === 'img' || type === 'image') {
-      parts.push('[图片]')
-    } else if (type === 'face') {
-      parts.push('[表情]')
-    } else if (type === 'audio' || type === 'record') {
-      parts.push('[语音]')
-    } else if (type === 'video') {
-      parts.push('[视频]')
-    } else if (type === 'file') {
-      parts.push('[文件]')
-    } else if (type === 'quote' || type === 'reply') {
-      parts.push('[回复]')
-    }
-  }
-  return parts.join('').trim()
-}
-
-export interface QuoteInfo {
-  userName: string
-  text: string
-  imageUrls: string[]
-  fromSelf: boolean
-}
-
-/** Read the message the current message is replying to (OneBot quote). */
-export function extractQuote(session: any, selfId: string, imageLimit: number): QuoteInfo | null {
-  const raw = session?.quote
-  if (raw === null || raw === undefined) return null
-  const quote = typeof raw === 'string' ? { content: raw } : raw
-  const elements = Array.isArray(quote.elements) ? quote.elements : []
-  const text = describeSessionForModel({ elements, content: quote.content }, selfId).trim()
-  const imageUrls = collectImageUrls({ elements, content: quote.content }, Math.max(0, imageLimit))
-  const user = quote.user ?? quote.author ?? null
-  const userId = String(user?.id ?? quote.userId ?? '')
-  const userName = String(user?.name ?? user?.nickname ?? quote.userName ?? userId ?? '某人')
-  if (text === '' && imageUrls.length === 0) return null
-  return { userName, text, imageUrls, fromSelf: userId !== '' && userId === selfId }
-}
-
-function senderName(session: any): string {
-  return String(session?.author?.name ?? session?.username ?? session?.userId ?? '群友')
-}
-
-/** Image URLs present on the current message. */
-export function collectImageUrls(session: any, limit: number): string[] {
-  const elements = Array.isArray(session?.elements) ? session.elements : []
-  const urls: string[] = []
-  for (const element of elements) {
-    if (element?.type !== 'image' && element?.type !== 'img') continue
-    const raw = element?.attrs?.src ?? element?.attrs?.url ?? element?.attrs?.file
-    const url = typeof raw === 'string' ? raw.trim() : ''
-    if (!/^https?:\/\//iu.test(url)) continue
-    if (!urls.includes(url)) urls.push(url)
-    if (urls.length >= limit) break
-  }
-  return urls
-}
-
-function mediaTypeOf(contentType: string | null, url: string): string {
-  const type = String(contentType ?? '').split(';')[0].trim().toLowerCase()
-  if (type === 'image/jpeg' || type === 'image/png' || type === 'image/webp' || type === 'image/gif') return type
-  const match = /\.(jpe?g|png|webp|gif)(?:\?|$)/iu.exec(url)
-  if (match !== null) {
-    const ext = match[1].toLowerCase()
-    if (ext === 'jpg') return 'image/jpeg'
-    return `image/${ext}`
-  }
-  return 'image/jpeg'
-}
-
-/** Download images for multimodal inference. */
-export async function downloadImageUrls(urls: string[], config: Config, fetchImpl: typeof fetch = fetch): Promise<InboundImage[]> {
-  const images: InboundImage[] = []
-  for (const url of urls) {
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 12000)
-      timer.unref?.()
-      let response: Response
-      try {
-        response = await fetchImpl(url, { signal: controller.signal })
-      } finally {
-        clearTimeout(timer)
-      }
-      if (response.ok !== true) continue
-      const type = mediaTypeOf(response.headers.get('content-type'), url)
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.byteLength === 0 || buffer.byteLength > config.imageMaxBytes) continue
-      images.push({ mediaType: type, data: buffer.toString('base64') })
-    } catch {
-      // ignore a broken image; text still goes through
-    }
-  }
-  return images
-}
-
-export async function downloadImages(session: any, config: Config, fetchImpl: typeof fetch = fetch): Promise<InboundImage[]> {
-  return downloadImageUrls(collectImageUrls(session, Math.max(0, config.imageLimit)), config, fetchImpl)
-}
 
 export function apply(ctx: Context, config: Config): void {
   const logger = ctx.logger('ai-chat')
   const history = new Map<string, HistoryMessage[]>()
   const replyQueues = new Map<string, Promise<void>>()
-  interface PendingBatch {
-    texts: string[]
-    imageUrls: string[]
-    lastSession: any
-    key: string
-    name: string
-    firstAt: number
-    timer: any
-  }
   const batches = new Map<string, PendingBatch>()
   const followUntil = new Map<string, number>()
   const discoveryPath = resolve(process.cwd(), config.discoveryFile)
@@ -559,41 +251,31 @@ export function apply(ctx: Context, config: Config): void {
       const backgroundImages = backgroundUrls.length > 0 ? await downloadImageUrls(backgroundUrls, config) : []
       const quotedUrls = (quote?.imageUrls ?? []).filter((url) => !currentUrls.includes(url))
       const quotedImages = quotedUrls.length > 0 ? await downloadImageUrls(quotedUrls, config) : []
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), Math.max(5000, config.timeoutMs))
-      timer.unref?.()
-      let response: Response
-      try {
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            messages,
-            background,
-            images,
-            backgroundImages,
-            quotedImages,
-            quote: quote === null ? null : {
-              userName: quote.userName,
-              text: quote.text,
-              fromSelf: quote.fromSelf,
-              imageCount: quotedImages.length,
-            },
-            groupId: key,
-            userId: String(session.userId ?? ''),
-            userName: name,
-            mentionSelf: shareMentions.self,
-            mentionOthers: shareMentions.others,
-            mentionAll: shareMentions.all,
-            replyToBot,
-            ...(config.systemPrompt !== '' ? { system: config.systemPrompt } : {}),
-          }),
-          signal: controller.signal,
-        })
-      } finally {
-        clearTimeout(timer)
+      const payload: AiPayload = {
+        messages,
+        background,
+        images,
+        backgroundImages,
+        quotedImages,
+        quote: quote === null ? null : {
+          userName: quote.userName,
+          text: quote.text,
+          fromSelf: quote.fromSelf,
+          imageCount: quotedImages.length,
+        },
+        groupId: key,
+        userId: String(session.userId ?? ''),
+        userName: name,
+        mentionSelf: shareMentions.self,
+        mentionOthers: shareMentions.others,
+        mentionAll: shareMentions.all,
+        replyToBot,
+        ...(config.systemPrompt !== '' ? { system: config.systemPrompt } : {}),
       }
-      const data: any = await response.json().catch(() => null)
+      const bridge = await postAi(endpoint, payload, config)
+      if (bridge.ok !== true) throw new Error(bridge.error ?? 'AI bridge request failed')
+      const data: any = bridge.data
+
       if (data !== null && data.ok !== true && (data.code === 'BUSY' || data.retryable === true)) {
         const reason = String(data.error ?? '模型服务繁忙')
         logger.warn('AI 服务繁忙，本次不发送错误提示：%s', reason)
@@ -611,7 +293,7 @@ export function apply(ctx: Context, config: Config): void {
         return
       }
       if (data === null || data.ok !== true || typeof data.reply !== 'string') {
-        const error = String(data?.error ?? `HTTP ${response.status}`)
+        const error = String(data?.error ?? `HTTP ${bridge.status}`)
         logger.warn('AI 回复失败：%s', error)
         state.lastReply = { at: new Date().toISOString(), ok: false, error: error.slice(0, 200) }
         persistState()
