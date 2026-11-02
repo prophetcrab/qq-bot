@@ -6,6 +6,8 @@
  * decisions move into the runtime.
  */
 
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { Context, Schema, Service } from 'koishi'
 import { EventStore, ThreadTracker } from './events.js'
 import { GroupActorRegistry, ActivationScheduler } from './scheduler.js'
@@ -36,6 +38,8 @@ export interface Config {
   maxPerWindow: number
   /** Sliding window for maxPerWindow. */
   windowMs: number
+  /** Persisted dynamic keyword lexicon. */
+  stateFile: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -43,6 +47,7 @@ export const Config: Schema<Config> = Schema.object({
   minIntervalMs: Schema.number().default(20000).min(0).max(600000).description('同群普通回复最小间隔（毫秒）'),
   maxPerWindow: Schema.number().default(3).min(1).max(100).description('同群窗口内最多普通回复数'),
   windowMs: Schema.number().default(600000).min(1000).max(3600000).description('群预算滑动窗口（毫秒）'),
+  stateFile: Schema.string().default('data/state/runtime-lexicon.json').description('动态关键词持久化文件'),
 })
 
 export interface ObserveInput {
@@ -84,15 +89,90 @@ export class RuntimeService extends Service<Config> {
   private readonly lastMessageAt = new Map<string, number>()
   private readonly lastReplyAt = new Map<string, number>()
   private readonly lastReplyByThread = new Map<string, number>()
+  private readonly activationListeners = new Set<(events: BotEvent[]) => void>()
+  private readonly statePath: string
+  private readonly ticker: ReturnType<typeof setInterval>
+  private saveTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'qqbotRuntime', true)
-    this.config = Object.assign({ shadow: true, minIntervalMs: 20000, maxPerWindow: 3, windowMs: 600000 }, config)
+    this.config = Object.assign({
+      shadow: true,
+      minIntervalMs: 20000,
+      maxPerWindow: 3,
+      windowMs: 600000,
+      stateFile: 'data/state/runtime-lexicon.json',
+    }, config)
     this.groups = new GroupActorRegistry({
       minIntervalMs: this.config.minIntervalMs,
       maxPerWindow: this.config.maxPerWindow,
       windowMs: this.config.windowMs,
     })
+    this.statePath = resolve(process.cwd(), this.config.stateFile)
+    this.loadLexicon()
+    this.ticker = setInterval(() => this.tick(), 50)
+    this.ticker.unref?.()
+    ctx.on('dispose', () => {
+      clearInterval(this.ticker)
+      if (this.saveTimer !== null) clearTimeout(this.saveTimer)
+      this.saveNow()
+    })
+  }
+
+  /** Subscribe to events whose activation time has arrived. */
+  onActivation(listener: (events: BotEvent[]) => void): () => void {
+    this.activationListeners.add(listener)
+    return () => this.activationListeners.delete(listener)
+  }
+
+  /** Put an event on the runtime's delay queue. */
+  scheduleEvent(eventId: string, notBefore: number, deadline: number | null = null): boolean {
+    const event = this.events.get(eventId)
+    if (event === null) return false
+    const next = this.events.update(eventId, { notBefore, deadline, state: 'scheduled' })
+    if (next === null) return false
+    this.scheduler.schedule(next)
+    return true
+  }
+
+  cancelEvent(eventId: string): void {
+    this.scheduler.cancel(eventId)
+  }
+
+  /** Persist the lexicon immediately (called on dispose or by tests). */
+  saveNow(): void {
+    try {
+      mkdirSync(dirname(this.statePath), { recursive: true })
+      writeFileSync(this.statePath, `${JSON.stringify({ version: 1, sets: this.lexicon.exportState() }, null, 2)}\n`, 'utf8')
+    } catch {
+      // persistence is best-effort
+    }
+  }
+
+  private loadLexicon(): void {
+    try {
+      const parsed = JSON.parse(readFileSync(this.statePath, 'utf8'))
+      if (parsed !== null && typeof parsed === 'object' && Array.isArray(parsed.sets)) {
+        this.lexicon.restoreState(parsed.sets)
+      }
+    } catch {
+      // missing/corrupt state starts empty
+    }
+  }
+
+  private scheduleSave(): void {
+    if (this.saveTimer !== null) return
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null
+      this.saveNow()
+    }, 800)
+    this.saveTimer.unref?.()
+  }
+
+  private tick(): void {
+    const due = this.scheduler.due(Date.now())
+    if (due.length === 0) return
+    for (const listener of this.activationListeners) listener(due)
   }
 
   /** Convert every inbound message into an event and compute its attention. */
@@ -113,6 +193,7 @@ export class RuntimeService extends Service<Config> {
     const keywordScore = keywordHits.reduce((sum, hit) => sum + hit.weight * hit.confidence, 0)
     if (!input.text.startsWith('/')) {
       for (const key of keys) this.lexicon.learn(input.text, key, now)
+      this.scheduleSave()
     }
     const previous = this.lastMessageAt.get(input.groupId)
     this.lastMessageAt.set(input.groupId, now)

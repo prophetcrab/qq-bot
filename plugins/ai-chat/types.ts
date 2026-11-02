@@ -33,8 +33,8 @@ export interface PendingBatch {
   key: string
   name: string
   threadId?: string
+  eventId: string
   firstAt: number
-  timer: any
 }
 
 export interface MentionInfo {

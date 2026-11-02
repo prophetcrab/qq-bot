@@ -201,3 +201,18 @@ test('ExtensionRegistry: game/activity/life source registration and cleanup', ()
 test('scopeKey: stable key format', () => {
   assert.equal(scopeKey({ scope: 'group', owner: 'g1' }), 'group:g1')
 })
+
+
+test('DynamicLexicon: export/restore preserves scopes, weights and status', () => {
+  const lexicon = new DynamicLexicon()
+  const key = { scope: 'group' as const, owner: 'g1' }
+  lexicon.add(key, '龙图', { weight: 0.8, confidence: 0.9, aliases: ['longtu'] }, 10)
+  lexicon.add(key, '屏蔽词', { weight: 1, confidence: 1 }, 10)
+  lexicon.suppress(key, '屏蔽词')
+  const state = lexicon.exportState()
+  const restored = new DynamicLexicon()
+  restored.restoreState(state)
+  assert.ok(restored.score('看看龙图', [key]) > 0)
+  assert.equal(restored.score('屏蔽词', [key]), 0)
+  assert.deepEqual(restored.match('longtu', [key]).map((hit) => hit.text), ['龙图'])
+})

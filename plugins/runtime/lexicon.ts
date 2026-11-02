@@ -202,6 +202,38 @@ export class DynamicLexicon {
     return [...grouped.values()]
   }
 
+  /** Serialize the lexicon for persistence. */
+  exportState(): Array<{ key: LexiconKey; terms: KeywordTerm[] }> {
+    return this.snapshot()
+  }
+
+  /** Restore persisted terms, preserving weights and expiration. */
+  restoreState(state: Array<{ key: LexiconKey; terms: KeywordTerm[] }>): void {
+    this.terms.clear()
+    for (const set of state) {
+      if (set === null || typeof set !== 'object' || set.key === undefined) continue
+      const key = set.key
+      if (typeof key.scope !== 'string' || typeof key.owner !== 'string') continue
+      for (const term of set.terms ?? []) {
+        if (term === null || typeof term !== 'object' || typeof term.text !== 'string') continue
+        const normalized = normalize(term.text)
+        if (normalized === '') continue
+        const stored: KeywordTerm = {
+          text: normalized,
+          aliases: uniqueAliases(term.aliases ?? []),
+          weight: clamp01(Number(term.weight) || 0.2),
+          confidence: clamp01(Number(term.confidence) || 0.5),
+          source: typeof term.source === 'string' ? term.source : 'persisted',
+          firstSeenAt: Number(term.firstSeenAt) || Date.now(),
+          lastSeenAt: Number(term.lastSeenAt) || Date.now(),
+          expiresAt: term.expiresAt === null ? null : Number(term.expiresAt) || null,
+          status: term.status === 'pinned' || term.status === 'suppressed' ? term.status : 'active',
+        }
+        this.terms.set(`${scopeKey(key)}|${normalized}`, { key, term: stored })
+      }
+    }
+  }
+
   private enforceLimit(key: LexiconKey, now: number): void {
     const id = scopeKey(key)
     const list = [...this.terms.entries()].filter(([, stored]) => scopeKey(stored.key) === id)

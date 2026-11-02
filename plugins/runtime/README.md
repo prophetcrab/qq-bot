@@ -22,7 +22,9 @@ ExtensionRegistry (Game / Activity / LifeSource)
 ## 原则
 
 - 关键词只提高注意力，不强制回复
+- 动态关键词持久化到 `data/state/runtime-lexicon.json`
 - 事件可以 notBefore / deadline / snooze
+- ActivationScheduler 驱动 ai-chat 批量延迟
 - 每群独立预算
 - 游戏规则不读取人格
 - 工具通过 ReAct observation 回传

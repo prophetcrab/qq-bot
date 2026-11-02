@@ -29,6 +29,7 @@ export function apply(ctx: Context, config: Config): void {
   const history = new Map<string, HistoryMessage[]>()
   const replyQueues = new Map<string, Promise<void>>()
   const batches = new Map<string, PendingBatch>()
+  const batchByEvent = new Map<string, string>()
   const discoveryPath = resolve(process.cwd(), config.discoveryFile)
   const statePath = resolve(process.cwd(), config.stateFile)
   const settingsPath = resolve(process.cwd(), config.settingsFile)
@@ -99,7 +100,6 @@ export function apply(ctx: Context, config: Config): void {
   const scheduleBatch = (userKey: string): void => {
     const batch = batches.get(userKey)
     if (batch === undefined) return
-    clearTimeout(batch.timer)
     const now = Date.now()
     const windowMs = Math.max(0, runtime.batchWindowMs)
     const maxWaitMs = Math.max(windowMs, runtime.batchMaxWaitMs)
@@ -108,15 +108,17 @@ export function apply(ctx: Context, config: Config): void {
       flushBatch(userKey)
       return
     }
-    batch.timer = setTimeout(() => { flushBatch(userKey) }, deadline - now)
-    batch.timer.unref?.()
+    // The runtime's ActivationScheduler owns delayed activation; ai-chat only
+    // decides what to do when the event becomes eligible.
+    ctx.qqbotRuntime.scheduleEvent(batch.eventId, deadline, batch.firstAt + maxWaitMs + 100)
   }
 
   const flushBatch = (userKey: string): void => {
     const batch = batches.get(userKey)
     if (batch === undefined) return
-    clearTimeout(batch.timer)
     batches.delete(userKey)
+    batchByEvent.delete(batch.eventId)
+    ctx.qqbotRuntime.cancelEvent(batch.eventId)
     if (batch.texts.length === 0 && batch.imageUrls.length === 0) return
     const content = batch.texts.join('\n')
     void enqueueReply(userKey, () => processReply({
@@ -129,6 +131,13 @@ export function apply(ctx: Context, config: Config): void {
       texts: batch.texts.length > 0 ? batch.texts : ['（对方发送了图片但没有文字）'],
     }))
   }
+
+  ctx.effect(() => ctx.qqbotRuntime.onActivation((events) => {
+    for (const event of events) {
+      const userKey = batchByEvent.get(event.id)
+      if (userKey !== undefined) flushBatch(userKey)
+    }
+  }), 'ai-chat: runtime activations')
 
   ctx.middleware(async (session, next) => {
     if (!runtime.enabled) return next()
@@ -216,9 +225,10 @@ export function apply(ctx: Context, config: Config): void {
         key,
         name,
         threadId: observation.thread.id,
+        eventId: observation.event.id,
         firstAt: Date.now(),
-        timer: null,
       })
+      batchByEvent.set(observation.event.id, userKey)
       scheduleBatch(userKey)
       return
     }
