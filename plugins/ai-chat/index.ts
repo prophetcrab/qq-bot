@@ -13,6 +13,8 @@ import { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf, 
 import { collectImageUrls, downloadImageUrls } from './media.js'
 import { postAi } from './gateway.js'
 import type { AiPayload } from './gateway.js'
+import { decideTrigger } from './trigger.js'
+import { buildBackground, collectBackgroundImages } from './context.js'
 import type { HistoryMessage, PendingBatch } from './types.js'
 
 export { Config } from './config.js'
@@ -92,23 +94,8 @@ export function apply(ctx: Context, config: Config): void {
     history.set(key, list)
   }
 
-  const collectBackgroundImages = (key: string): string[] => {
-    const list = (history.get(key) ?? []).slice(-20)
-    const urls: string[] = []
-    for (const item of list) {
-      for (const url of item.images ?? []) {
-        if (!urls.includes(url)) urls.push(url)
-      }
-    }
-    return urls.slice(-Math.max(0, config.imageLimit))
-  }
-
-  const buildBackground = (key: string): string => {
-    const background = (history.get(key) ?? []).slice(-Math.max(0, runtime.historyLimit))
-    return background
-      .map((item) => `- ${item.role === 'assistant' ? 'AI' : item.name ?? '群友'}：${String(item.text).slice(0, 500)}`)
-      .join('\n')
-  }
+  const backgroundFor = (key: string): string => buildBackground(history.get(key) ?? [], runtime.historyLimit)
+  const backgroundImagesFor = (key: string): string[] => collectBackgroundImages(history.get(key) ?? [], config.imageLimit)
 
   const scheduleBatch = (userKey: string): void => {
     const batch = batches.get(userKey)
@@ -171,13 +158,20 @@ export function apply(ctx: Context, config: Config): void {
     const mentions = collectMentions(session, String(session.selfId))
     const mentioned = mentions.self
     const replied = isReplyToSelf(session, String(session.selfId))
-    const forced = mentioned || replied
     const inFollowUp = (followUntil.get(followKey(session)) ?? 0) > Date.now()
     const hasContent = content !== '' || imageUrls.length > 0
     const userBusy = replyQueues.has(followKey(session))
-    const randomHit = !forced && !inFollowUp && !userBusy && hasContent && Math.random() < runtime.replyProbability
-    const shouldReply = !isCommand && hasContent && (forced || inFollowUp || userBusy || randomHit)
-    const reason = forced ? (mentioned ? 'mention' : 'reply') : inFollowUp ? 'follow-up' : userBusy ? 'queued' : randomHit ? 'probability' : 'none'
+    const trigger = decideTrigger({
+      isCommand,
+      hasContent,
+      mentioned,
+      replied,
+      inFollowUp,
+      userBusy,
+      replyProbability: runtime.replyProbability,
+    })
+    const shouldReply = trigger.shouldReply
+    const reason = trigger.reason
 
     state.lastInbound = {
       at: new Date().toISOString(),
@@ -240,13 +234,13 @@ export function apply(ctx: Context, config: Config): void {
     }
     const current: HistoryMessage = { role: 'user', name, text: prompt }
     const messages: HistoryMessage[] = [{ role: 'user', text: prompt }]
-    const background = buildBackground(key)
+    const background = backgroundFor(key)
     const shareMentions = collectMentions(session, String(session.selfId))
     const replyToBot = isReplyToSelf(session, String(session.selfId))
     try {
       const currentUrls = Array.isArray(imageUrls) ? imageUrls : []
       const quote = extractQuote(session, String(session.selfId), config.imageLimit)
-      const backgroundUrls = collectBackgroundImages(key).filter((url) => !currentUrls.includes(url) && !(quote?.imageUrls ?? []).includes(url))
+      const backgroundUrls = backgroundImagesFor(key).filter((url) => !currentUrls.includes(url) && !(quote?.imageUrls ?? []).includes(url))
       const images = currentUrls.length > 0 ? await downloadImageUrls(currentUrls, config) : []
       const backgroundImages = backgroundUrls.length > 0 ? await downloadImageUrls(backgroundUrls, config) : []
       const quotedUrls = (quote?.imageUrls ?? []).filter((url) => !currentUrls.includes(url))
