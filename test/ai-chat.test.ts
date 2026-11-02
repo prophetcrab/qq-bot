@@ -156,7 +156,7 @@ test('引用机器人的消息必定触发', async (t) => {
   assert.equal(aiChat.isReplyToSelf({}, SELF_ID), false)
 })
 
-test('最多只把最近 100 条背景消息发给 DSH', async (t) => {
+test('背景最多只发送最近 12 条消息', async (t) => {
   const { app, calls } = await setup(t, { historyLimit: 100 })
   for (let index = 0; index < 105; index += 1) {
     await app.mock.client(USER, GROUP).receive(`背景消息 ${index}`)
@@ -167,10 +167,25 @@ test('最多只把最近 100 条背景消息发给 DSH', async (t) => {
   assert.equal(messages.length, 1)
   assert.ok(messages[0].text.includes('只看当前这条'))
   const background = calls[0].body.background
-  assert.ok(background.includes('背景消息 5'))
-  assert.ok(!background.includes('背景消息 0'))
+  assert.ok(background.includes('背景消息 93'))
+  assert.ok(!background.includes('背景消息 92'))
   assert.ok(background.includes('背景消息 104'))
-  assert.equal(background.split('\n').length, 100)
+  assert.equal(background.split('\n').length, 12)
+})
+
+test('真实多轮对话：下一轮带上上一轮的 user/assistant 消息', async (t) => {
+  const { app, calls } = await setup(t)
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一轮问题`)
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第二轮问题`)
+  assert.equal(calls.length, 2)
+  const messages = calls[1].body.messages
+  assert.equal(messages.length, 3)
+  assert.equal(messages[0].role, 'user')
+  assert.ok(messages[0].text.includes('第一轮问题'))
+  assert.equal(messages[1].role, 'assistant')
+  assert.ok(messages[1].text.includes('这是 AI 的回复'))
+  assert.equal(messages[2].role, 'user')
+  assert.ok(messages[2].text.includes('第二轮问题'))
 })
 
 test('当前消息带图片时把图片数据一起发给 DSH', async (t) => {

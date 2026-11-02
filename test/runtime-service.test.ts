@@ -87,3 +87,29 @@ test('RuntimeService: group budget hot-reloads from ai-settings.json', async (t)
   reloaded.recordSpeech(Date.now())
   assert.equal(reloaded.canSpeak(Date.now() + 1000), false)
 })
+
+
+test('RuntimeService: a recent reply in the same thread doubles the reply chance', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'qqbot-runtime-followup-'))
+  const app = new App({ prefix: ['/'] })
+  app.plugin(runtime as any, {
+    shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000,
+    interestsFile: join(dir, 'interests.json'), settingsFile: join(dir, 'ai-settings.json'),
+  })
+  await app.start()
+  t.after(async () => { await app.stop(); await rm(dir, { recursive: true, force: true }) })
+  const service = (app as any).qqbotRuntime as runtime.RuntimeService
+  const now = Date.now()
+  const first = service.observeMessage({ messageId: 'm1', groupId: 'g1', userId: 'u1', userName: 'A', text: '你好', at: now })
+  service.recordReply('g1', first.thread.id, now + 1)
+  const next = service.observeMessage({
+    messageId: 'm2', groupId: 'g1', userId: 'u1', userName: 'A', text: '继续', at: now + 2, followUpMinutes: 3,
+  })
+  assert.equal(next.followUp, true)
+  assert.equal(service.shouldReply(next, 0.2, () => 0.3), true)
+  const other = service.observeMessage({
+    messageId: 'm3', groupId: 'g2', userId: 'u2', userName: 'B', text: '你好', at: now + 2, followUpMinutes: 3,
+  })
+  assert.equal(other.followUp, false)
+  assert.equal(service.shouldReply(other, 0.2, () => 0.3), false)
+})

@@ -3,6 +3,7 @@ export interface HistoryMessage {
   role: 'user' | 'assistant'
   name?: string
   text: string
+  threadId?: string
   images?: string[]
 }
 

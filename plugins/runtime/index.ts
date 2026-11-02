@@ -62,6 +62,7 @@ export interface ObserveInput {
   at?: number
   mentionSelf?: boolean
   replyToBot?: boolean
+  followUpMinutes?: number
 }
 
 export interface Observation {
@@ -69,6 +70,7 @@ export interface Observation {
   thread: Thread
   interestHits: InterestHit[]
   hotTopics: string[]
+  followUp: boolean
   keywordScore: number
   attention: AttentionResult
   forced: boolean
@@ -224,6 +226,10 @@ export class RuntimeService extends Service<Config> {
     const forced = input.mentionSelf === true || input.replyToBot === true
     const lastReply = this.lastReplyAt.get(input.groupId)
     const threadReply = this.lastReplyByThread.get(thread.id)
+    const followUpMinutes = Math.max(0, Number(input.followUpMinutes) || 0)
+    const followUp = followUpMinutes > 0
+      && threadReply !== undefined
+      && now - threadReply <= followUpMinutes * 60_000
     const event = this.events.create({
       kind: forced ? 'message.direct' : 'message.observed',
       groupId: input.groupId,
@@ -247,7 +253,7 @@ export class RuntimeService extends Service<Config> {
       budgetExhausted: !this.groups.get(input.groupId).canSpeak(now),
     })
     if (threadReply !== undefined) event.payload.lastThreadReplyAt = threadReply
-    return { event, thread, interestHits, hotTopics, keywordScore, attention, forced }
+    return { event, thread, interestHits, hotTopics, followUp, keywordScore, attention, forced }
   }
 
   /** Decide whether the current event may produce a reply. */
@@ -255,7 +261,7 @@ export class RuntimeService extends Service<Config> {
     if (observation.attention.decision === 'forced') return true
     if (observation.attention.reasons.includes('budget-exhausted')) return false
     const chance = attentionReplyChance(observation.attention.decision, replyProbability)
-    const multiplier = observation.hotTopics.length > 0 ? 1.8 : 1
+    const multiplier = (observation.followUp ? 2 : 1) * (observation.hotTopics.length > 0 ? 1.8 : 1)
     return random() < Math.min(1, chance * multiplier)
   }
 

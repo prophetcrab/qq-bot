@@ -21,3 +21,23 @@ export function collectBackgroundImages(list: HistoryMessage[], limit: number): 
   }
   return urls.slice(-Math.max(0, limit))
 }
+
+
+/**
+ * Completed conversation turns in one thread: include messages up to the last
+ * assistant reply, but never trail behind a dead user-only tail. This keeps
+ * the request a real dialogue instead of a pile of unanswered group messages.
+ */
+export function conversationFor(list: HistoryMessage[], threadId: string | undefined, maxMessages = 8): HistoryMessage[] {
+  if (typeof threadId !== 'string' || threadId === '') return []
+  const relevant = list.filter((message) => message.threadId === threadId)
+  let lastAssistant = -1
+  for (let index = relevant.length - 1; index >= 0; index -= 1) {
+    if (relevant[index].role === 'assistant') {
+      lastAssistant = index
+      break
+    }
+  }
+  if (lastAssistant < 0) return []
+  return relevant.slice(Math.max(0, lastAssistant - maxMessages + 1), lastAssistant + 1)
+}

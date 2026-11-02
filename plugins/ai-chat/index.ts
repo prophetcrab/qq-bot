@@ -13,7 +13,7 @@ import { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf, 
 import { collectImageUrls, downloadImageUrls } from './media.js'
 import { postAi } from './gateway.js'
 import type { AiPayload } from './gateway.js'
-import { buildBackground, collectBackgroundImages } from './context.js'
+import { buildBackground, collectBackgroundImages, conversationFor } from './context.js'
 import type { Discovery, HistoryMessage, PendingBatch } from './types.js'
 
 export { Config } from './config.js'
@@ -95,7 +95,6 @@ export function apply(ctx: Context, config: Config): void {
     history.set(key, list)
   }
 
-  const backgroundFor = (key: string): string => buildBackground(history.get(key) ?? [], runtime.historyLimit)
   const backgroundImagesFor = (key: string): string[] => collectBackgroundImages(history.get(key) ?? [], config.imageLimit)
 
   const scheduleBatch = (userKey: string): void => {
@@ -169,6 +168,7 @@ export function apply(ctx: Context, config: Config): void {
       at: Date.now(),
       mentionSelf: mentioned,
       replyToBot: replied,
+      followUpMinutes: runtime.followUpMinutes,
     })
     const activeBatch = batches.get(userKey)
     if (!isCommand && activeBatch !== undefined && (content !== '' || imageUrls.length > 0)) {
@@ -201,6 +201,7 @@ export function apply(ctx: Context, config: Config): void {
       keywordScore: observation.keywordScore,
       interestLabels: observation.interestHits.map((hit) => hit.label),
       hotTopics: observation.hotTopics,
+      followUp: observation.followUp,
       attention: observation.attention.score,
       attentionDecision: observation.attention.decision,
       attentionReasons: observation.attention.reasons,
@@ -218,7 +219,7 @@ export function apply(ctx: Context, config: Config): void {
 
     if (!shouldReply) {
       if (content !== '' && !isCommand && content.length <= 2000) {
-        pushHistory(key, { role: 'user', name, text: content, ...(imageUrls.length > 0 ? { images: imageUrls } : {}) })
+        pushHistory(key, { role: 'user', name, text: content, threadId: observation.thread.id, ...(imageUrls.length > 0 ? { images: imageUrls } : {}) })
       }
       return next()
     }
@@ -265,8 +266,17 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
     const current: HistoryMessage = { role: 'user', name, text: prompt }
-    const messages: HistoryMessage[] = [{ role: 'user', text: prompt }]
-    const background = backgroundFor(key)
+    const allHistory = history.get(key) ?? []
+    const conversation = conversationFor(allHistory, threadId, 8)
+    const conversationSet = new Set(conversation)
+    const messages: HistoryMessage[] = [
+      ...conversation.map((message) => ({
+        role: message.role,
+        text: message.role === 'user' ? `${message.name ?? '群友'}：${message.text}` : message.text,
+      })),
+      { role: 'user', text: prompt },
+    ]
+    const background = buildBackground(allHistory.filter((message) => !conversationSet.has(message)), Math.min(runtime.historyLimit, 12))
     const shareMentions = collectMentions(session, String(session.selfId))
     const replyToBot = isReplyToSelf(session, String(session.selfId))
     try {
@@ -319,7 +329,7 @@ export function apply(ctx: Context, config: Config): void {
         const reason = String(data.reason ?? '人设判断不需要回复')
         logger.info('AI 自检决定不回复：%s', reason)
         const historyTexts = Array.isArray(texts) && texts.length > 0 ? texts : [current.text]
-        for (const text of historyTexts) pushHistory(key, { role: 'user', name, text })
+        for (const text of historyTexts) pushHistory(key, { role: 'user', name, text, threadId })
         state.lastReply = { at: new Date().toISOString(), ok: true, skipped: true, reason: reason.slice(0, 200) }
         persistState()
         return
@@ -337,9 +347,9 @@ export function apply(ctx: Context, config: Config): void {
       const historyTexts = Array.isArray(texts) && texts.length > 0 ? texts : [current.text]
       const historyImages = Array.isArray(imageUrls) ? imageUrls : []
       historyTexts.forEach((text, index) => {
-        pushHistory(key, { role: 'user', name, text, ...(index === 0 && historyImages.length > 0 ? { images: historyImages } : {}) })
+        pushHistory(key, { role: 'user', name, text, threadId, ...(index === 0 && historyImages.length > 0 ? { images: historyImages } : {}) })
       })
-      pushHistory(key, { role: 'assistant', text: reply })
+      pushHistory(key, { role: 'assistant', text: reply, threadId })
       const prior = recentReplies.get(key) ?? []
       recentReplies.set(key, [...prior, reply.slice(0, 160)].slice(-6))
       ctx.qqbotRuntime.recordReply(key, threadId ?? null, Date.now(), Array.isArray(interestLabels) ? interestLabels : [])
