@@ -40,9 +40,9 @@ export const Config: Schema<Config> = Schema.object({
   timeoutMs: Schema.number().default(120000).min(5000).max(600000)
     .description('调用 DSH AI 桥的超时时间'),
   endpoint: Schema.string().default('').description('DSH AI 桥地址；留空则读取 discoveryFile'),
-  discoveryFile: Schema.string().default('data/ai.json').description('DSH 写入的 AI 桥发现文件（相对项目根目录）'),
-  stateFile: Schema.string().default('data/ai-chat-state.json').description('AI 监听/回复诊断状态文件（相对项目根目录）'),
-  settingsFile: Schema.string().default('data/ai-settings.json').description('DSH 面板写入的运行时回复设置（概率/跟进/上下文）'),
+  discoveryFile: Schema.string().default('data/state/ai.json').description('DSH 写入的 AI 桥发现文件（相对项目根目录）'),
+  stateFile: Schema.string().default('data/state/ai-chat-state.json').description('AI 监听/回复诊断状态文件（相对项目根目录）'),
+  settingsFile: Schema.string().default('data/config/ai-settings.json').description('DSH 面板写入的运行时回复设置（概率/跟进/上下文）'),
   systemPrompt: Schema.string().default('').description('额外系统提示词；留空使用 DSH 侧默认'),
   imageLimit: Schema.number().default(4).min(0).max(6).description('每条消息最多读取的图片数'),
   imageMaxBytes: Schema.number().default(6 * 1024 * 1024).min(1024 * 1024).max(10 * 1024 * 1024)

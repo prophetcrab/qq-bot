@@ -214,7 +214,7 @@ export const Config: Schema<Config> = Schema.object({
     .min(1)
     .description('内存中保留的最近消息条数上限'),
   accessFile: Schema.string()
-    .default('data/access.json')
+    .default('data/config/access.json')
     .description('权限策略文件；配置白名单时只把目标群的消息记录到监控面板'),
 })
 

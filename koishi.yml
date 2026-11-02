@@ -11,7 +11,7 @@ plugins:
     help:ss74sj: {}
   group:storage:
     database-sqlite:04sj84:
-      path: data/koishi.db
+      path: data/state/koishi.db
   group:console:
     console:ortt43:
       open: false

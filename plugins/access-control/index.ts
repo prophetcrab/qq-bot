@@ -49,13 +49,13 @@ export interface Config {
   quietPrefixes: string[]
 }
 
-export const DEFAULT_STORAGE_PATH = 'data/access.json'
+export const DEFAULT_STORAGE_PATH = 'data/config/access.json'
 export const DEFAULT_QUIET_PREFIXES = ['/']
 
 export const Config: Schema<Config> = Schema.object({
   storagePath: Schema.string()
     .default(DEFAULT_STORAGE_PATH)
-    .description('策略文件路径，默认 data/access.json（相对 koishi 进程 cwd）'),
+    .description('策略文件路径，默认 data/config/access.json（相对 koishi 进程 cwd）'),
   logBlocked: Schema.boolean()
     .default(false)
     .description('是否记录被拦截消息的 debug 日志（会按关键词节流）'),
