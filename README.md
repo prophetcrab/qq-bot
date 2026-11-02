@@ -29,7 +29,7 @@ qq-bot/
 ├── plugins/                       # 本地 Koishi 插件（TS 源码，直接加载）
 │   ├── core/                      # 核心服务：ctx.qqbot + 统计 + qqbot.status
 │   ├── health/                    # 健康检查接口 /api/qqbot/health
-│   ├── access-control/            # 群/私聊收发权限过滤（data/access.json）
+│   ├── access-control/            # 群/私聊收发权限过滤（data/config/access.json）
 │   ├── echo/                      # 示例：指令 /echo、复读别名、关键词中间件
 │   └── welcome/                   # 示例：入群事件监听 + @ 新成员欢迎
 ├── scripts/
@@ -66,7 +66,7 @@ qq-bot/
   batchMaxWaitMs: 10000
 ```
 
-DSH 端会把 `data/ai.json`（端点、provider、model）写好，插件自动读取；DSH 端口变化后自动更新。人设卡在 DSH 面板编辑，保存为 `data/persona.json`；人物画像保存在 `data/profiles.json`。面板「AI」页的回复设置写入 `data/ai-settings.json`，插件热加载，无需重启。
+DSH 端会把 `data/state/ai.json`（端点、provider、model）写好，插件自动读取；DSH 端口变化后自动更新。人设卡在 DSH 面板编辑，保存为 `data/config/persona.json`；人物画像保存在 `data/assets/profiles.json`。面板「AI」页的回复设置写入 `data/config/ai-settings.json`，插件热加载，无需重启。
 
 ## 运行时目录
 
@@ -119,7 +119,7 @@ npm run mock:qq
 
 ## 权限管理（接收 / 发送）
 
-`plugins/access-control` 会读取 `data/access.json`，对**接收消息**和**发送消息**分别做群聊/私聊级过滤；文件变更约 1 秒内自动热加载，无需重启 Koishi。
+`plugins/access-control` 会读取 `data/config/access.json`，对**接收消息**和**发送消息**分别做群聊/私聊级过滤；文件变更约 1 秒内自动热加载，无需重启 Koishi。
 
 ```json
 {

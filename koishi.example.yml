@@ -87,8 +87,8 @@ plugins:
     ./plugins/welcome:
       message: 欢迎加入本群，发送 /help 查看机器人指令～
       onlyGroup: true
-    # 群/私聊收发权限过滤：策略文件 data/access.json（可被 DSH 权限页管理）
+    # 群/私聊收发权限过滤：策略文件 data/config/access.json（可被 DSH 权限页管理）
     ./plugins/access-control:
-      storagePath: data/access.json
+      storagePath: data/config/access.json
       logBlocked: false
       quietPrefixes: ['/']

@@ -73,7 +73,7 @@ async function setup(t: TestContext, options: SetupOptions = {}) {
   return { app, dir, storagePath, executed, client }
 }
 
-test('默认 all-allow：群聊/私聊均放行，且自动创建 data/access.json', async (t) => {
+test('默认 all-allow：群聊/私聊均放行，且自动创建 data/config/access.json', async (t) => {
   const { app, storagePath } = await setup(t, { policy: null })
 
   // 首次启动：目录与默认文件都应被创建

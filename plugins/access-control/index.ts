@@ -21,7 +21,7 @@ export interface QuietPolicy {
 }
 
 /**
- * 与 DSH 侧共享的 `data/access.json` 结构。
+ * 与 DSH 侧共享的 `data/config/access.json` 结构。
  *
  * 该结构由 DSH qqbot 插件写入、由本插件读取，字段与默认值必须保持一致：
  * `version` / `updatedAt` / `inbound.{groups,private,quiet}` / `outbound.{groups,private}`。
