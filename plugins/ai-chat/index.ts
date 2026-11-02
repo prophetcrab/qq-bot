@@ -196,6 +196,7 @@ export function apply(ctx: Context, config: Config): void {
       replyToBot: replied,
       threadId: observation.thread.id,
       keywordScore: observation.keywordScore,
+      interestLabels: observation.interestHits.map((hit) => hit.label),
       attention: observation.attention.score,
       attentionDecision: observation.attention.decision,
       attentionReasons: observation.attention.reasons,
