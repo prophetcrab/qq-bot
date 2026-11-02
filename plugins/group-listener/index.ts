@@ -118,6 +118,23 @@ function renderEnvelope(e: Envelope, depth = 0): string {
   return lines.join('\n')
 }
 
+const DIRECT_FALLBACK_TEXT = '我在，怎么了？'
+
+/** Direct triggers must produce text; action-only or disabled results are invalid. */
+export function ensureDirectSpeak(reason: string, speak: any): any {
+  const direct = reason === 'mention' || reason === 'reply'
+  if (!direct) return speak
+  if (speak?.enabled === true && speak.kind === 'reply' && speak.replyType === 'action') {
+    return { ...speak, replyType: 'normal' }
+  }
+  if (speak?.enabled === true) return speak
+  return { enabled: true, kind: 'statement', replyType: null, target: { messageIds: [], userIds: [] } }
+}
+
+export function directFallbackText(reason: string): string {
+  return reason === 'mention' || reason === 'reply' ? DIRECT_FALLBACK_TEXT : ''
+}
+
 export function apply(ctx: Context, config: Config): void {
   const logger = ctx.logger('group-listener')
   const discoveryPath = resolve(process.cwd(), config.discoveryFile)
@@ -215,12 +232,17 @@ export function apply(ctx: Context, config: Config): void {
     try {
       const analysis = await api('/qqbot/group/analyze', { loopId: item.loopId, groupId: key, trigger: { reason: item.reason, messageId: item.triggerMessageIds[item.triggerMessageIds.length - 1] }, material })
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
+      speak = ensureDirectSpeak(item.reason, speak)
       if (speak.enabled === true) {
         const composed = await api('/qqbot/group/compose', { loopId: item.loopId, groupId: key, material, speak })
         if (composed?.ok === true && typeof composed.text === 'string') {
           reply = composed.text.trim()
+          if (reply === '' && (item.reason === 'mention' || item.reason === 'reply')) reply = directFallbackText(item.reason)
           if (speak.replyType === 'action' || reply !== '') sendResult = await sendReply(item, speak, reply)
-        } else sendResult = { sent: false, reason: 'compose_failed', error: composed?.error }
+        } else {
+          reply = directFallbackText(item.reason)
+          sendResult = reply !== '' ? await sendReply(item, speak, reply) : { sent: false, reason: 'compose_failed', error: composed?.error }
+        }
       }
     } catch (error: any) { sendResult = { sent: false, reason: 'loop_failed', error: String(error?.message ?? error) } }
     if (sendResult.sent === true) appendBot(g, key, item.loopId, reply, Date.now())
