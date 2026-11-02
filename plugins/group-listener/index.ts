@@ -143,6 +143,9 @@ export function apply(ctx: Context, config: Config): void {
   const groups = new Map<string, GroupState>()
   const recentLoops: any[] = []
   const global = { active: 0, waiting: 0 }
+  const groupNameCache = new Map<string, string>()
+  let groupListFetchedAt = 0
+  let groupListPending = false
   let endpoint = config.endpoint
   const readDiscovery = (): string => {
     if (endpoint !== '') return endpoint
@@ -161,6 +164,32 @@ export function apply(ctx: Context, config: Config): void {
       return data !== null && typeof data === 'object' ? data : { ok: false, error: `HTTP ${response.status}` }
     } catch (error: any) { return { ok: false, error: String(error?.message ?? error) } } finally { clearTimeout(timer) }
   }
+  const refreshGroupNames = async (bot: any): Promise<void> => {
+    if (groupListPending || Date.now() - groupListFetchedAt < 5 * 60 * 1000) return
+    groupListPending = true
+    try {
+      let list: any[] = []
+      if (typeof bot?.internal?.getGroupList === 'function') {
+        const raw = await bot.internal.getGroupList()
+        list = Array.isArray(raw) ? raw : []
+      } else if (typeof bot?.getGuildList === 'function') {
+        const raw = await bot.getGuildList()
+        list = Array.isArray(raw?.data) ? raw.data : []
+      }
+      for (const item of list) {
+        const id = String(item?.group_id ?? item?.id ?? '')
+        const name = str(item?.group_name) || str(item?.name)
+        if (id !== '' && name !== '') groupNameCache.set(id, name)
+      }
+      for (const [id, group] of groups) {
+        const name = groupNameCache.get(id)
+        if (name !== undefined && group.name === '') group.name = name
+      }
+      groupListFetchedAt = Date.now()
+      persist()
+    } catch { /* group name is best effort */ } finally { groupListPending = false }
+  }
+
   const stateOf = (key: string): GroupState => {
     let state = groups.get(key)
     if (state === undefined) {
@@ -287,7 +316,12 @@ export function apply(ctx: Context, config: Config): void {
     const g = stateOf(key)
     g.lastSession = session
     const groupName = str((session as any).guildName) || str((session as any).event?.guild?.name) || str((session as any).event?.channel?.name)
-    if (groupName !== '') g.name = groupName
+    if (groupName !== '') { g.name = groupName; groupNameCache.set(key, groupName) }
+    else if (g.name === '') {
+      const cached = groupNameCache.get(key)
+      if (cached !== undefined) g.name = cached
+      else void refreshGroupNames(session.bot)
+    }
     const envelope = normalize(session, key)
     g.buffer.push(envelope); if (g.buffer.length > config.bufferSize) g.buffer.splice(0, g.buffer.length - config.bufferSize)
     g.unprocessed += 1; g.senders.add(envelope.sender.qq)
@@ -298,6 +332,10 @@ export function apply(ctx: Context, config: Config): void {
     persist()
     return next()
   })
+  const initialNames = setTimeout(() => {
+    const bot = (ctx as any).bots?.[0]
+    if (bot !== undefined) void refreshGroupNames(bot)
+  }, 4000); initialNames.unref?.()
   const ticker = setInterval(() => {
     const now = Date.now()
     for (const [key, g] of groups) {
@@ -307,5 +345,5 @@ export function apply(ctx: Context, config: Config): void {
       if (latest !== undefined && g.lastSession !== null) enqueueNormal(key, latest.id, g.lastSession, 'time')
     }
   }, 15000); ticker.unref?.()
-  ctx.on('dispose', () => clearInterval(ticker))
+  ctx.on('dispose', () => { clearInterval(ticker); clearTimeout(initialNames) })
 }
