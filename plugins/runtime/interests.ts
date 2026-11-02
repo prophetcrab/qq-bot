@@ -99,3 +99,74 @@ export class SemanticInterestStore {
     return [...this.byGroup.values()].flat().filter((interest) => groupId === undefined || interest.groupId === normalize(groupId))
   }
 }
+
+export interface TopicHeat {
+  groupId: string
+  label: string
+  heat: number
+  expiresAt: number
+  lastSeenAt: number
+}
+
+/**
+ * Short-term topic heat. Kept in memory (not in the semantic interest file),
+ * so a burst of replies never turns a temporary topic into long-term memory.
+ */
+export class TopicHeatStore {
+  private readonly entries = new Map<string, TopicHeat>()
+  private readonly ttlMs: number
+
+  constructor(ttlMs = 15 * 60 * 1000) {
+    this.ttlMs = ttlMs
+  }
+
+  private key(groupId: string, label: string): string {
+    return `${normalize(groupId)}|${normalize(label)}`
+  }
+
+  record(groupId: string, labels: string[], now = Date.now()): void {
+    for (const label of labels) {
+      if (label.trim() === '') continue
+      const key = this.key(groupId, label)
+      const existing = this.entries.get(key)
+      this.entries.set(key, {
+        groupId: normalize(groupId),
+        label: label.trim(),
+        heat: existing === undefined ? 1 : Math.min(2, existing.heat + 0.5),
+        expiresAt: now + this.ttlMs,
+        lastSeenAt: now,
+      })
+    }
+  }
+
+  touch(groupId: string, labels: string[], now = Date.now()): void {
+    for (const label of labels) {
+      const entry = this.entries.get(this.key(groupId, label))
+      if (entry === undefined) continue
+      entry.expiresAt = now + this.ttlMs
+      entry.lastSeenAt = now
+    }
+  }
+
+  active(groupId: string, labels: string[], now = Date.now()): string[] {
+    const wanted = new Set(labels.map((label) => normalize(label)))
+    const active: string[] = []
+    for (const entry of this.entries.values()) {
+      if (entry.groupId !== normalize(groupId)) continue
+      if (now >= entry.expiresAt) continue
+      if (!wanted.has(normalize(entry.label))) continue
+      active.push(entry.label)
+    }
+    return active
+  }
+
+  prune(now = Date.now()): void {
+    for (const [key, entry] of this.entries) {
+      if (now >= entry.expiresAt) this.entries.delete(key)
+    }
+  }
+
+  list(): TopicHeat[] {
+    return [...this.entries.values()].map((entry) => ({ ...entry }))
+  }
+}

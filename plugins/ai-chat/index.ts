@@ -127,6 +127,7 @@ export function apply(ctx: Context, config: Config): void {
       key: batch.key,
       name: batch.name,
       threadId: batch.threadId,
+      interestLabels: batch.interestLabels,
       content: content !== '' ? content : '（对方发送了图片但没有文字）',
       imageUrls: batch.imageUrls,
       texts: batch.texts.length > 0 ? batch.texts : ['（对方发送了图片但没有文字）'],
@@ -177,6 +178,7 @@ export function apply(ctx: Context, config: Config): void {
       activeBatch.lastSession = session
       activeBatch.name = name
       activeBatch.threadId = observation.thread.id
+      activeBatch.interestLabels = [...new Set([...activeBatch.interestLabels, ...observation.interestHits.map((hit: any) => hit.label)])]
       scheduleBatch(userKey)
       return
     }
@@ -198,6 +200,7 @@ export function apply(ctx: Context, config: Config): void {
       threadId: observation.thread.id,
       keywordScore: observation.keywordScore,
       interestLabels: observation.interestHits.map((hit) => hit.label),
+      hotTopics: observation.hotTopics,
       attention: observation.attention.score,
       attentionDecision: observation.attention.decision,
       attentionReasons: observation.attention.reasons,
@@ -228,6 +231,7 @@ export function apply(ctx: Context, config: Config): void {
         key,
         name,
         threadId: observation.thread.id,
+        interestLabels: observation.interestHits.map((hit: any) => hit.label),
         eventId: observation.event.id,
         firstAt: Date.now(),
       })
@@ -235,7 +239,7 @@ export function apply(ctx: Context, config: Config): void {
       scheduleBatch(userKey)
       return
     }
-    await enqueueReply(userKey, () => processReply({ session, key, name, threadId: observation.thread.id, content, imageUrls, texts: [content] }))
+    await enqueueReply(userKey, () => processReply({ session, key, name, threadId: observation.thread.id, content, imageUrls, texts: [content], interestLabels: observation.interestHits.map((hit) => hit.label) }))
     return
   })
 
@@ -253,7 +257,7 @@ export function apply(ctx: Context, config: Config): void {
     return next
   }
 
-  async function processReply({ session, key, name, threadId, content, imageUrls, texts }: any): Promise<void> {
+  async function processReply({ session, key, name, threadId, content, imageUrls, texts, interestLabels }: any): Promise<void> {
     const prompt = content !== '' ? content : '（对方发送了图片但没有文字）'
     const endpoint = endpointOf()
     if (endpoint === null) {
@@ -338,7 +342,7 @@ export function apply(ctx: Context, config: Config): void {
       pushHistory(key, { role: 'assistant', text: reply })
       const prior = recentReplies.get(key) ?? []
       recentReplies.set(key, [...prior, reply.slice(0, 160)].slice(-6))
-      ctx.qqbotRuntime.recordReply(key, threadId ?? null)
+      ctx.qqbotRuntime.recordReply(key, threadId ?? null, Date.now(), Array.isArray(interestLabels) ? interestLabels : [])
       const parts = segmentReply(reply, mode, config.maxReplyChars)
       const pause = config.naturalDelay ? replyDelayMs(mode, reply) : 0
       state.lastReply = {

@@ -33,6 +33,7 @@ export interface PendingBatch {
   key: string
   name: string
   threadId?: string
+  interestLabels: string[]
   eventId: string
   firstAt: number
 }

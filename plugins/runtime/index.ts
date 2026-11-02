@@ -11,7 +11,7 @@ import { resolve } from 'node:path'
 import { Context, Schema, Service } from 'koishi'
 import { EventStore, ThreadTracker } from './events.js'
 import { GroupActorRegistry, ActivationScheduler } from './scheduler.js'
-import { SemanticInterestStore } from './interests.js'
+import { SemanticInterestStore, TopicHeatStore } from './interests.js'
 import { ToolRegistry } from './tools.js'
 import { ExtensionRegistry } from './extensions.js'
 import { attentionReplyChance, evaluateAttention } from './attention.js'
@@ -68,6 +68,7 @@ export interface Observation {
   event: BotEvent
   thread: Thread
   interestHits: InterestHit[]
+  hotTopics: string[]
   keywordScore: number
   attention: AttentionResult
   forced: boolean
@@ -86,6 +87,7 @@ export class RuntimeService extends Service<Config> {
   readonly scheduler = new ActivationScheduler()
   readonly groups: GroupActorRegistry
   readonly interests = new SemanticInterestStore()
+  readonly heat = new TopicHeatStore()
   readonly tools = new ToolRegistry()
   readonly extensions = new ExtensionRegistry()
   private readonly lastMessageAt = new Map<string, number>()
@@ -195,6 +197,7 @@ export class RuntimeService extends Service<Config> {
     if (now - this.lastPruneAt >= 60_000) {
       this.lastPruneAt = now
       this.interests.prune(now)
+      this.heat.prune(now)
     }
     const due = this.scheduler.due(now)
     if (due.length === 0) return
@@ -212,7 +215,10 @@ export class RuntimeService extends Service<Config> {
       quoteMessageId: input.quoteMessageId ?? null,
     })
     const interestHits = this.interests.match(input.text, input.groupId)
-    const keywordScore = interestHits.reduce((sum, hit) => sum + hit.weight * hit.confidence, 0)
+    const hotTopics = this.heat.active(input.groupId, interestHits.map((hit) => hit.label), now)
+    if (hotTopics.length > 0) this.heat.touch(input.groupId, hotTopics, now)
+    const interestScore = interestHits.reduce((sum, hit) => sum + hit.weight * hit.confidence, 0)
+    const keywordScore = Math.min(1, interestScore + (hotTopics.length > 0 ? 0.6 : 0))
     const previous = this.lastMessageAt.get(input.groupId)
     this.lastMessageAt.set(input.groupId, now)
     const forced = input.mentionSelf === true || input.replyToBot === true
@@ -241,21 +247,24 @@ export class RuntimeService extends Service<Config> {
       budgetExhausted: !this.groups.get(input.groupId).canSpeak(now),
     })
     if (threadReply !== undefined) event.payload.lastThreadReplyAt = threadReply
-    return { event, thread, interestHits, keywordScore, attention, forced }
+    return { event, thread, interestHits, hotTopics, keywordScore, attention, forced }
   }
 
   /** Decide whether the current event may produce a reply. */
   shouldReply(observation: Observation, replyProbability: number, random: () => number = Math.random): boolean {
     if (observation.attention.decision === 'forced') return true
     if (observation.attention.reasons.includes('budget-exhausted')) return false
-    return random() < attentionReplyChance(observation.attention.decision, replyProbability)
+    const chance = attentionReplyChance(observation.attention.decision, replyProbability)
+    const multiplier = observation.hotTopics.length > 0 ? 1.8 : 1
+    return random() < Math.min(1, chance * multiplier)
   }
 
   /** Record an outbound reply so budgets/attention can see it next time. */
-  recordReply(groupId: string, threadId: string | null, at = Date.now()): void {
+  recordReply(groupId: string, threadId: string | null, at = Date.now(), interestLabels: string[] = []): void {
     this.groups.get(groupId).recordSpeech(at)
     this.lastReplyAt.set(groupId, at)
     if (threadId !== null) this.lastReplyByThread.set(threadId, at)
+    this.heat.record(groupId, interestLabels, at)
   }
 }
 
