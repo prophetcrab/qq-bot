@@ -14,7 +14,7 @@ import { GroupActorRegistry, ActivationScheduler } from './scheduler.js'
 import { DynamicLexicon } from './lexicon.js'
 import { ToolRegistry } from './tools.js'
 import { ExtensionRegistry } from './extensions.js'
-import { evaluateAttention } from './attention.js'
+import { attentionReplyChance, evaluateAttention } from './attention.js'
 import type { AttentionResult, BotEvent, KeywordHit, LexiconKey, Thread } from './types.js'
 
 export * from './types.js'
@@ -230,12 +230,7 @@ export class RuntimeService extends Service<Config> {
   shouldReply(observation: Observation, replyProbability: number, random: () => number = Math.random): boolean {
     if (observation.attention.decision === 'forced') return true
     if (observation.attention.reasons.includes('budget-exhausted')) return false
-    // Low attention still follows the configured probability; high attention
-    // boosts it. This preserves the existing reply rate while making keywords
-    // and thread continuity win ties.
-    const chance = observation.attention.decision === 'high'
-      ? Math.min(0.9, Math.max(replyProbability, replyProbability * 3))
-      : replyProbability
+    const chance = attentionReplyChance(observation.attention.decision, replyProbability)
     return random() < chance
   }
 

@@ -7,7 +7,7 @@ export interface AttentionThresholds {
   medium: number
 }
 
-const DEFAULT_THRESHOLDS: AttentionThresholds = { high: 0.65, medium: 0.35 }
+const DEFAULT_THRESHOLDS: AttentionThresholds = { high: 0.5, medium: 0.3 }
 
 export function evaluateAttention(
   input: AttentionInput,
@@ -52,4 +52,26 @@ export function evaluateAttention(
   score = Math.max(0, Math.min(1, score))
   const decision = score >= thresholds.high ? 'high' : score >= thresholds.medium ? 'medium' : 'low'
   return { score, decision, reasons }
+}
+
+
+/**
+ * Convert a deliberate probability into a tiered reply chance.
+ *
+ * High attention triples the configured probability, medium doubles it and low
+ * halves it. A configured probability of 1 still means "always", which keeps
+ * the manual test switch deterministic.
+ */
+export function attentionReplyChance(
+  decision: AttentionResult['decision'],
+  replyProbability: number,
+): number {
+  if (!Number.isFinite(replyProbability)) return 0
+  const probability = Math.max(0, Math.min(1, replyProbability))
+  if (decision === 'forced') return 1
+  if (probability >= 1) return 1
+  if (probability <= 0) return 0
+  if (decision === 'high') return Math.min(1, probability * 3)
+  if (decision === 'medium') return Math.min(1, probability * 2)
+  return probability * 0.5
 }

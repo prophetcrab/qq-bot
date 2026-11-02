@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { EventStore, ThreadTracker } from '../plugins/runtime/events.ts'
 import { ActivationScheduler, GroupActor } from '../plugins/runtime/scheduler.ts'
 import { DynamicLexicon, extractCandidates, scopeKey } from '../plugins/runtime/lexicon.ts'
-import { evaluateAttention } from '../plugins/runtime/attention.ts'
+import { attentionReplyChance, evaluateAttention } from '../plugins/runtime/attention.ts'
 import { runEpisode } from '../plugins/runtime/episodes.ts'
 import { ToolRegistry } from '../plugins/runtime/tools.ts'
 import { ExtensionRegistry } from '../plugins/runtime/extensions.ts'
@@ -108,6 +108,24 @@ test('DynamicLexicon: pinned terms survive decay, suppressed terms do not match'
   lexicon.add(key, '屏蔽词', { weight: 1, confidence: 1 }, 0)
   lexicon.suppress(key, '屏蔽词')
   assert.equal(lexicon.score('屏蔽词', [key]), 0)
+})
+
+test('Attention: high/medium/low reply chances are distinct', () => {
+  assert.equal(attentionReplyChance('forced', 0.2), 1)
+  assert.ok(Math.abs(attentionReplyChance('high', 0.2) - 0.6) < 1e-9)
+  assert.ok(Math.abs(attentionReplyChance('medium', 0.2) - 0.4) < 1e-9)
+  assert.ok(Math.abs(attentionReplyChance('low', 0.2) - 0.1) < 1e-9)
+  assert.equal(attentionReplyChance('low', 1), 1)
+  assert.equal(attentionReplyChance('medium', 0), 0)
+})
+
+test('Attention: high threshold is reachable with keyword plus thread', () => {
+  const medium = evaluateAttention({ keywordScore: 0.64, threadContinuity: 1 })
+  assert.equal(medium.decision, 'medium')
+  assert.ok(medium.score >= 0.3 && medium.score < 0.5)
+  const high = evaluateAttention({ keywordScore: 1, threadContinuity: 1, question: true })
+  assert.equal(high.decision, 'high')
+  assert.ok(high.score >= 0.5)
 })
 
 test('Attention: forced, keyword boost, budget and penalties', () => {
