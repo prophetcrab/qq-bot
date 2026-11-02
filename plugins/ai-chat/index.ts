@@ -42,6 +42,7 @@ export function apply(ctx: Context, config: Config): void {
     batchMaxWaitMs: runtime.batchMaxWaitMs,
     lastInbound: null,
     lastReply: null,
+    groups: {},
     updatedAt: null,
   }
   const persistState = (): void => {
@@ -192,6 +193,11 @@ export function apply(ctx: Context, config: Config): void {
       replyProbability: runtime.replyProbability,
       shouldReply,
       reason,
+    }
+    const previousGroup = state.groups[key] ?? {}
+    state.groups[key] = {
+      ...state.lastInbound,
+      recent: [...(Array.isArray(previousGroup.recent) ? previousGroup.recent : []), { ...state.lastInbound }].slice(-10),
     }
     persistState()
 

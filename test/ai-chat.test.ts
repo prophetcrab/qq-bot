@@ -127,6 +127,18 @@ test('回复某人后，跟进窗口不再强制每条消息都回复', async (t
   assert.equal(calls.length, 1)
 })
 
+test('不同发送者进入同一背景时保留各自身份', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 0 })
+  await app.mock.client(USER_B, GROUP).receive('B 说的话')
+  const replies = await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> A 的问题`)
+  assert.deepEqual(replies, ['这是 AI 的回复'])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].body.userId, USER)
+  assert.ok(calls[0].body.background.includes(USER_B))
+  assert.ok(calls[0].body.background.includes('B 说的话'))
+  assert.ok(calls[0].body.messages[0].text.includes('A 的问题'))
+})
+
 test('引用机器人的消息必定触发', async (t) => {
   assert.equal(aiChat.isReplyToSelf({ quote: { user: { id: SELF_ID } } }, SELF_ID), true)
   assert.equal(aiChat.isReplyToSelf({ quote: { userId: Number(SELF_ID) } }, SELF_ID), true)
