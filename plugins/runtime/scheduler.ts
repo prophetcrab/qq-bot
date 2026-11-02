@@ -83,8 +83,8 @@ export class GroupActor {
 
   constructor(groupId: string, options: BudgetOptions = {}) {
     this.groupId = groupId
-    this.minIntervalMs = options.minIntervalMs ?? 20_000
-    this.maxPerWindow = options.maxPerWindow ?? 3
+    this.minIntervalMs = options.minIntervalMs ?? 10_000
+    this.maxPerWindow = options.maxPerWindow ?? 10
     this.windowMs = options.windowMs ?? 10 * 60 * 1000
   }
 

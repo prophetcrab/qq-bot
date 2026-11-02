@@ -51,6 +51,6 @@ plugins:
       onlyGroup: true
     ./plugins/runtime:runtime01:
       shadow: false
-      minIntervalMs: 20000
-      maxPerWindow: 3
+      minIntervalMs: 10000
+      maxPerWindow: 10
       windowMs: 600000
