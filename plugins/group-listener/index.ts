@@ -231,6 +231,7 @@ export function apply(ctx: Context, config: Config): void {
     g.cooldownUntil = finishedAt + (sendResult.sent === true ? config.cooldownReplyMs : config.cooldownNoReplyMs)
     g.active = null; global.active = Math.max(0, global.active - 1); persist()
   }
+  const sleep = (ms: number): Promise<void> => new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
   const wake = async (key: string): Promise<void> => {
     const g = stateOf(key)
     if (g.running) return
@@ -242,10 +243,11 @@ export function apply(ctx: Context, config: Config): void {
         if (g.queue.urgent === item) g.queue.urgent = null
         else g.queue.normal = null
         if (item.priority === 'normal' && Date.now() < g.cooldownUntil) {
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, Math.min(30000, g.cooldownUntil - Date.now())))
+          await sleep(Math.min(30000, Math.max(1, g.cooldownUntil - Date.now())))
           if (g.queue.urgent !== null) continue
           if (Date.now() < g.cooldownUntil) { continue }
         }
+        while (global.active >= config.maxConcurrentGroups) await sleep(100)
         await runLoop(key, item)
       }
     } finally { g.running = false; persist() }
