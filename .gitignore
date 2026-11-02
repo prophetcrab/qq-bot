@@ -1,7 +1,7 @@
 node_modules
 data/*
 !data/.gitkeep
-runtime/
+/runtime/
 logs/
 *.db
 *.db-journal
