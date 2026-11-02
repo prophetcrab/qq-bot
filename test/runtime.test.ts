@@ -112,9 +112,10 @@ test('DynamicLexicon: pinned terms survive decay, suppressed terms do not match'
 
 test('Attention: high/medium/low reply chances are distinct', () => {
   assert.equal(attentionReplyChance('forced', 0.2), 1)
-  assert.ok(Math.abs(attentionReplyChance('high', 0.2) - 0.6) < 1e-9)
+  assert.equal(attentionReplyChance('high', 0.2), 1)
+  assert.equal(attentionReplyChance('high', 0), 1)
   assert.ok(Math.abs(attentionReplyChance('medium', 0.2) - 0.4) < 1e-9)
-  assert.ok(Math.abs(attentionReplyChance('low', 0.2) - 0.1) < 1e-9)
+  assert.ok(Math.abs(attentionReplyChance('low', 0.2) - 0.2) < 1e-9)
   assert.equal(attentionReplyChance('low', 1), 1)
   assert.equal(attentionReplyChance('medium', 0), 0)
 })

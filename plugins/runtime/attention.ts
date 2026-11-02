@@ -58,9 +58,9 @@ export function evaluateAttention(
 /**
  * Convert a deliberate probability into a tiered reply chance.
  *
- * High attention triples the configured probability, medium doubles it and low
- * halves it. A configured probability of 1 still means "always", which keeps
- * the manual test switch deterministic.
+ * low    -> the configured probability
+ * medium -> twice the configured probability (capped at 100%)
+ * high   -> always reply
  */
 export function attentionReplyChance(
   decision: AttentionResult['decision'],
@@ -68,10 +68,9 @@ export function attentionReplyChance(
 ): number {
   if (!Number.isFinite(replyProbability)) return 0
   const probability = Math.max(0, Math.min(1, replyProbability))
-  if (decision === 'forced') return 1
+  if (decision === 'forced' || decision === 'high') return 1
   if (probability >= 1) return 1
   if (probability <= 0) return 0
-  if (decision === 'high') return Math.min(1, probability * 3)
   if (decision === 'medium') return Math.min(1, probability * 2)
-  return probability * 0.5
+  return probability
 }
