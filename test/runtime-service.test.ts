@@ -18,7 +18,7 @@ test('RuntimeService: scheduler ticker emits due events', async (t) => {
     minIntervalMs: 0,
     maxPerWindow: 100,
     windowMs: 60000,
-    stateFile: join(dir, 'lexicon.json'),
+    interestsFile: join(dir, 'interests.json'),
     settingsFile: join(dir, 'ai-settings.json'),
   })
   await app.start()
@@ -32,25 +32,35 @@ test('RuntimeService: scheduler ticker emits due events', async (t) => {
   assert.deepEqual(seen, [event.id])
 })
 
-test('RuntimeService: lexicon survives save/load', async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), 'qqbot-runtime-persist-'))
-  const stateFile = join(dir, 'lexicon.json')
-  const first = new App({ prefix: ['/'] })
-  first.plugin(runtime as any, { shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000, stateFile, settingsFile: join(dir, 'ai-settings.json') })
-  await first.start()
-  const firstService = (first as any).qqbotRuntime as runtime.RuntimeService
-  firstService.lexicon.add({ scope: 'group', owner: 'g1' }, '龙图', { weight: 1, confidence: 1 }, Date.now())
-  firstService.saveNow()
-  await first.stop()
-
-  const second = new App({ prefix: ['/'] })
-  second.plugin(runtime as any, { shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000, stateFile, settingsFile: join(dir, 'ai-settings.json') })
-  await second.start()
-  t.after(async () => { await second.stop(); await rm(dir, { recursive: true, force: true }) })
-  const secondService = (second as any).qqbotRuntime as runtime.RuntimeService
-  assert.ok(secondService.lexicon.score('看龙图', [{ scope: 'group', owner: 'g1' }]) > 0)
+test('RuntimeService: matches semantic interests written by the host', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'qqbot-runtime-interests-'))
+  const interestsFile = join(dir, 'interests.json')
+  await writeFile(interestsFile, JSON.stringify({
+    version: 1,
+    interests: [{
+      groupId: 'g1', label: '龙图', aliases: ['龙图表情包'], summary: '群友喜欢龙图',
+      weight: 0.8, confidence: 0.9, expiresAt: Date.now() + 60000, lastSeenAt: Date.now(), source: 'llm',
+    }],
+  }))
+  const app = new App({ prefix: ['/'] })
+  app.plugin(runtime as any, {
+    shadow: false,
+    minIntervalMs: 0,
+    maxPerWindow: 100,
+    windowMs: 60000,
+    interestsFile,
+    settingsFile: join(dir, 'ai-settings.json'),
+  })
+  await app.start()
+  t.after(async () => { await app.stop(); await rm(dir, { recursive: true, force: true }) })
+  const service = (app as any).qqbotRuntime as runtime.RuntimeService
+  const observation = service.observeMessage({
+    messageId: 'm1', groupId: 'g1', userId: 'u1', userName: '小明', text: '这个龙图表情包不错', at: Date.now(),
+  })
+  assert.equal(observation.interestHits.length, 1)
+  assert.ok(observation.keywordScore > 0)
+  assert.equal(observation.interestHits[0].label, '龙图')
 })
-
 
 test('RuntimeService: group budget hot-reloads from ai-settings.json', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'qqbot-runtime-budget-'))
@@ -62,7 +72,7 @@ test('RuntimeService: group budget hot-reloads from ai-settings.json', async (t)
     minIntervalMs: 0,
     maxPerWindow: 100,
     windowMs: 60000,
-    stateFile: join(dir, 'lexicon.json'),
+    interestsFile: join(dir, 'interests.json'),
     settingsFile,
   })
   await app.start()
