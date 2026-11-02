@@ -12,6 +12,7 @@ export interface Config {
   groupOnly: boolean
   historyLimit: number
   maxReplyChars: number
+  naturalDelay: boolean
   timeoutMs: number
   endpoint: string
   discoveryFile: string
@@ -37,6 +38,8 @@ export const Config: Schema<Config> = Schema.object({
     .description('向上保留并发送的群聊背景消息条数（最多 100 条）'),
   maxReplyChars: Schema.number().default(1200).min(100).max(4000)
     .description('单条回复最大字符数（超长自动分条）'),
+  naturalDelay: Schema.boolean().default(true)
+    .description('发送前加入自然停顿，并在分段之间稍作停顿'),
   timeoutMs: Schema.number().default(120000).min(5000).max(600000)
     .description('调用 DSH AI 桥的超时时间'),
   endpoint: Schema.string().default('').description('DSH AI 桥地址；留空则读取 discoveryFile'),

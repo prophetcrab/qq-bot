@@ -8,7 +8,7 @@ import { mkdirSync, watchFile, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { loadRuntimeSettings, readDiscovery } from './config.js'
 import type { Config } from './config.js'
-import { sanitizeReplyText, splitReply } from './delivery.js'
+import { chooseReplyMode, replyDelayMs, sanitizeReplyText, segmentDelayMs, segmentReply, splitReply } from './delivery.js'
 import { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf, senderName } from './message.js'
 import { collectImageUrls, downloadImageUrls } from './media.js'
 import { postAi } from './gateway.js'
@@ -27,6 +27,7 @@ export const inject: string[] = ['qqbotRuntime']
 export function apply(ctx: Context, config: Config): void {
   const logger = ctx.logger('ai-chat')
   const history = new Map<string, HistoryMessage[]>()
+  const recentReplies = new Map<string, string[]>()
   const replyQueues = new Map<string, Promise<void>>()
   const batches = new Map<string, PendingBatch>()
   const batchByEvent = new Map<string, string>()
@@ -238,6 +239,10 @@ export function apply(ctx: Context, config: Config): void {
     return
   })
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
   /** Run a task after this person's previous reply attempt, without blocking others. */
   function enqueueReply(userKey: string, task: () => Promise<void>): Promise<void> {
     const previous = replyQueues.get(userKey) ?? Promise.resolve()
@@ -268,6 +273,9 @@ export function apply(ctx: Context, config: Config): void {
       const backgroundImages = backgroundUrls.length > 0 ? await downloadImageUrls(backgroundUrls, config) : []
       const quotedUrls = (quote?.imageUrls ?? []).filter((url) => !currentUrls.includes(url))
       const quotedImages = quotedUrls.length > 0 ? await downloadImageUrls(quotedUrls, config) : []
+      const question = /[?？]|吗|怎么|为什么|如何|能不能|是不是/u.test(prompt)
+      const mode = chooseReplyMode({ question, images: images.length > 0 })
+      const previousReplies = recentReplies.get(key) ?? []
       const payload: AiPayload = {
         apiVersion: 1,
         messages,
@@ -288,6 +296,8 @@ export function apply(ctx: Context, config: Config): void {
         mentionOthers: shareMentions.others,
         mentionAll: shareMentions.all,
         replyToBot,
+        replyMode: mode,
+        ...(previousReplies.length > 0 ? { recentReplies: previousReplies } : {}),
         ...(config.systemPrompt !== '' ? { system: config.systemPrompt } : {}),
       }
       const bridge = await postAi(endpoint, payload, config)
@@ -326,13 +336,26 @@ export function apply(ctx: Context, config: Config): void {
         pushHistory(key, { role: 'user', name, text, ...(index === 0 && historyImages.length > 0 ? { images: historyImages } : {}) })
       })
       pushHistory(key, { role: 'assistant', text: reply })
+      const prior = recentReplies.get(key) ?? []
+      recentReplies.set(key, [...prior, reply.slice(0, 160)].slice(-6))
       ctx.qqbotRuntime.recordReply(key, threadId ?? null)
-      state.lastReply = { at: new Date().toISOString(), ok: true, replyPreview: reply.slice(0, 120) }
-      persistState()
-      for (const part of splitReply(reply, config.maxReplyChars)) {
-        await session.send(part)
+      const parts = segmentReply(reply, mode, config.maxReplyChars)
+      const pause = config.naturalDelay ? replyDelayMs(mode, reply) : 0
+      state.lastReply = {
+        at: new Date().toISOString(),
+        ok: true,
+        replyPreview: reply.slice(0, 120),
+        replyMode: mode,
+        segments: parts.length,
+        delayMs: pause,
       }
-      logger.debug('AI 回复群 %s：%s', key, reply.slice(0, 120))
+      persistState()
+      if (pause > 0) await sleep(pause)
+      for (let index = 0; index < parts.length; index += 1) {
+        if (index > 0 && config.naturalDelay) await sleep(segmentDelayMs())
+        await session.send(parts[index])
+      }
+      logger.debug('AI 回复群 %s（%s）：%s', key, mode, reply.slice(0, 120))
     } catch (error: any) {
       const message = String(error?.message ?? error)
       logger.warn('AI 调用异常：%s', message)

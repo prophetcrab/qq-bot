@@ -62,6 +62,7 @@ async function setup(t: TestContext, config: Record<string, any> = {}, runtimeSe
     stateFile: join(dir, 'ai-chat-state.json'),
     replyProbability: 0,
     batchWindowMs: 0,
+    naturalDelay: false,
     ...config,
   })
   await app.start()
@@ -125,6 +126,15 @@ test('回复某人后，跟进窗口不再强制每条消息都回复', async (t
   const other = await app.mock.client(USER_B, GROUP).receive('另一个人的消息')
   assert.deepEqual(other, [])
   assert.equal(calls.length, 1)
+})
+
+test('回复请求带上表达模式与最近回复，用于软去重', async (t) => {
+  const { app, calls } = await setup(t, { replyProbability: 0 })
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
+  await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第二句`)
+  assert.equal(calls.length, 2)
+  assert.ok(['short', 'casual', 'reaction', 'normal'].includes(String(calls[0].body.replyMode)))
+  assert.deepEqual(calls[1].body.recentReplies, ['这是 AI 的回复'])
 })
 
 test('不同发送者进入同一背景时保留各自身份', async (t) => {

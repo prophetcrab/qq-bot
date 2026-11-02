@@ -18,6 +18,8 @@ export interface AiPayload {
   mentionAll: boolean
   replyToBot: boolean
   system?: string
+  replyMode?: string
+  recentReplies?: string[]
 }
 
 export interface AiBridgeResult {
