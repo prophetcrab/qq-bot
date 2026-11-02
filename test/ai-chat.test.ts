@@ -375,6 +375,7 @@ test('extractQuote：提取被引用消息的文字/图片/发送者', () => {
     },
   }
   const quote = aiChat.extractQuote(session, SELF_ID, 4)
+  assert.ok(quote !== null)
   assert.equal(quote.userName, '小明')
   assert.equal(quote.text, '这张图好看吗[图片]')
   assert.deepEqual(quote.imageUrls, [IMAGE_URL])
