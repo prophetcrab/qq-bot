@@ -15,7 +15,7 @@ import { postAi } from './gateway.js'
 import type { AiPayload } from './gateway.js'
 import { decideTrigger } from './trigger.js'
 import { buildBackground, collectBackgroundImages } from './context.js'
-import type { HistoryMessage, PendingBatch } from './types.js'
+import type { Discovery, HistoryMessage, PendingBatch } from './types.js'
 
 export { Config } from './config.js'
 export { sanitizeReplyText, splitReply } from './delivery.js'
