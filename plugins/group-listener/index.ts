@@ -42,6 +42,7 @@ interface Envelope {
 }
 interface QueueItem { loopId: string; reason: 'mention' | 'reply' | 'count' | 'time'; triggerMessageIds: string[]; session: any; enqueuedAt: number; priority: 'urgent' | 'normal' }
 interface GroupState {
+  name: string
   buffer: Envelope[]
   unprocessed: number
   lastTriggerAt: number
@@ -163,14 +164,14 @@ export function apply(ctx: Context, config: Config): void {
   const stateOf = (key: string): GroupState => {
     let state = groups.get(key)
     if (state === undefined) {
-      state = { buffer: [], unprocessed: 0, lastTriggerAt: Date.now(), senders: new Set(), cooldownUntil: 0, running: false, active: null, queue: { urgent: null, normal: null }, lastLoop: null, lastSession: null }
+      state = { name: '', buffer: [], unprocessed: 0, lastTriggerAt: Date.now(), senders: new Set(), cooldownUntil: 0, running: false, active: null, queue: { urgent: null, normal: null }, lastLoop: null, lastSession: null }
       groups.set(key, state)
     }
     return state
   }
   const persist = (): void => {
     const groupsView: Record<string, any> = {}
-    for (const [id, g] of groups) groupsView[id] = { bufferSize: g.buffer.length, unprocessed: g.unprocessed, running: g.running, active: g.active, cooldownUntil: g.cooldownUntil, queue: { urgent: g.queue.urgent?.reason ?? null, normal: g.queue.normal?.reason ?? null }, lastLoop: g.lastLoop }
+    for (const [id, g] of groups) groupsView[id] = { name: g.name, bufferSize: g.buffer.length, unprocessed: g.unprocessed, running: g.running, active: g.active, cooldownUntil: g.cooldownUntil, queue: { urgent: g.queue.urgent?.reason ?? null, normal: g.queue.normal?.reason ?? null }, lastLoop: g.lastLoop }
     const payload = { updatedAt: new Date().toISOString(), global: { ...global, groups: groups.size }, groups: groupsView, loops: recentLoops.slice(-30) }
     try { mkdirSync(dirname(statePath), { recursive: true }); writeFileSync(statePath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8') } catch { /* diagnostics only */ }
   }
@@ -285,6 +286,8 @@ export function apply(ctx: Context, config: Config): void {
     if (content.startsWith('/')) return next()
     const g = stateOf(key)
     g.lastSession = session
+    const groupName = str((session as any).guildName) || str((session as any).event?.guild?.name) || str((session as any).event?.channel?.name)
+    if (groupName !== '') g.name = groupName
     const envelope = normalize(session, key)
     g.buffer.push(envelope); if (g.buffer.length > config.bufferSize) g.buffer.splice(0, g.buffer.length - config.bufferSize)
     g.unprocessed += 1; g.senders.add(envelope.sender.qq)
