@@ -52,6 +52,18 @@ export function extractCandidates(text: string): string[] {
   } catch {
     chunks.push(...(normalized.match(/[\p{Script=Han}]{2,8}|[a-z][a-z0-9_-]{2,}/gu) ?? []))
   }
+  // Chinese proper nouns often segment into single characters (e.g. 龙/图).
+  // Add conservative 2-4 character Han n-grams so names and phrases survive.
+  for (const run of normalized.match(/\p{Script=Han}{2,}/gu) ?? []) {
+    const chars = [...run]
+    for (let size = 2; size <= Math.min(4, chars.length); size += 1) {
+      for (let index = 0; index + size <= chars.length; index += 1) {
+        const gram = chars.slice(index, index + size).join('')
+        if (STOPWORDS.has(gram)) continue
+        chunks.push(gram)
+      }
+    }
+  }
   const output: string[] = []
   for (const chunk of chunks) {
     const term = chunk.trim()

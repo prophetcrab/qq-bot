@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { EventStore, ThreadTracker } from '../plugins/runtime/events.ts'
 import { ActivationScheduler, GroupActor } from '../plugins/runtime/scheduler.ts'
-import { DynamicLexicon, scopeKey } from '../plugins/runtime/lexicon.ts'
+import { DynamicLexicon, extractCandidates, scopeKey } from '../plugins/runtime/lexicon.ts'
 import { evaluateAttention } from '../plugins/runtime/attention.ts'
 import { runEpisode } from '../plugins/runtime/episodes.ts'
 import { ToolRegistry } from '../plugins/runtime/tools.ts'
@@ -78,6 +78,11 @@ test('DynamicLexicon: scoped matches, aliases and keyword score', () => {
   assert.equal(hits.length, 2)
   assert.ok(lexicon.score('写小说', [global]) > 0)
   assert.equal(lexicon.score('写小说', [group]), 0)
+})
+
+test('extractCandidates: keeps Chinese names that segment into single chars', () => {
+  assert.ok(extractCandidates('我在看龙图').includes('龙图'))
+  assert.ok(extractCandidates('今天真热').includes('今天'))
 })
 
 test('DynamicLexicon: learn, decay and expire', () => {
