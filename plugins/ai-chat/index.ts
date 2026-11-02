@@ -197,6 +197,7 @@ export function apply(ctx: Context, config: Config): void {
       threadId: observation.thread.id,
       keywordScore: observation.keywordScore,
       attention: observation.attention.score,
+      attentionDecision: observation.attention.decision,
       attentionReasons: observation.attention.reasons,
       images: imageUrls.length,
       replyProbability: runtime.replyProbability,
