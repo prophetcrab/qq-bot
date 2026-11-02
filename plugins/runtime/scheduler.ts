@@ -114,10 +114,16 @@ export class GroupActor {
 /** One actor per group, kept independent so one busy group cannot starve another. */
 export class GroupActorRegistry {
   private readonly actors = new Map<string, GroupActor>()
-  private readonly options: BudgetOptions
+  private options: BudgetOptions
 
   constructor(options: BudgetOptions = {}) {
     this.options = options
+  }
+
+  /** Apply a live budget change; existing counters are reset for a clean window. */
+  configure(options: BudgetOptions): void {
+    this.options = { ...this.options, ...options }
+    this.actors.clear()
   }
 
   get(groupId: string): GroupActor {

@@ -55,7 +55,7 @@ async function setup(t: TestContext, config: Record<string, any> = {}, runtimeSe
 
   const app = new App({ prefix: ['/'] })
   app.plugin(mock, { selfId: SELF_ID })
-  app.plugin(runtime as any, { shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000, stateFile: join(dir, 'runtime-lexicon.json') })
+  app.plugin(runtime as any, { shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000, stateFile: join(dir, 'runtime-lexicon.json'), settingsFile: join(dir, 'ai-settings.json') })
   app.plugin(aiChat as any, {
     discoveryFile,
     settingsFile,

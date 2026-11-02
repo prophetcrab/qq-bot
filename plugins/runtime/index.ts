@@ -6,7 +6,7 @@
  * decisions move into the runtime.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, unwatchFile, watchFile, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { Context, Schema, Service } from 'koishi'
 import { EventStore, ThreadTracker } from './events.js'
@@ -40,6 +40,8 @@ export interface Config {
   windowMs: number
   /** Persisted dynamic keyword lexicon. */
   stateFile: string
+  /** AI settings file shared with ai-chat; budget fields are hot-reloaded. */
+  settingsFile: string
 }
 
 export const Config: Schema<Config> = Schema.object({
@@ -48,6 +50,7 @@ export const Config: Schema<Config> = Schema.object({
   maxPerWindow: Schema.number().default(10).min(1).max(100).description('同群窗口内最多普通回复数'),
   windowMs: Schema.number().default(600000).min(1000).max(3600000).description('群预算滑动窗口（毫秒）'),
   stateFile: Schema.string().default('data/state/runtime-lexicon.json').description('动态关键词持久化文件'),
+  settingsFile: Schema.string().default('data/config/ai-settings.json').description('AI 设置文件（群预算热更新）'),
 })
 
 export interface ObserveInput {
@@ -91,6 +94,7 @@ export class RuntimeService extends Service<Config> {
   private readonly lastReplyByThread = new Map<string, number>()
   private readonly activationListeners = new Set<(events: BotEvent[]) => void>()
   private readonly statePath: string
+  private readonly settingsPath: string
   private readonly ticker: ReturnType<typeof setInterval>
   private saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -102,19 +106,28 @@ export class RuntimeService extends Service<Config> {
       maxPerWindow: 10,
       windowMs: 600000,
       stateFile: 'data/state/runtime-lexicon.json',
+      settingsFile: 'data/config/ai-settings.json',
     }, config)
+    this.settingsPath = resolve(process.cwd(), this.config.settingsFile)
+    const budget = this.readBudgetSettings()
     this.groups = new GroupActorRegistry({
-      minIntervalMs: this.config.minIntervalMs,
-      maxPerWindow: this.config.maxPerWindow,
-      windowMs: this.config.windowMs,
+      minIntervalMs: budget.minIntervalMs ?? this.config.minIntervalMs,
+      maxPerWindow: budget.maxPerWindow ?? this.config.maxPerWindow,
+      windowMs: budget.windowMs ?? this.config.windowMs,
     })
     this.statePath = resolve(process.cwd(), this.config.stateFile)
     this.loadLexicon()
     this.ticker = setInterval(() => this.tick(), 50)
     this.ticker.unref?.()
+    try {
+      watchFile(this.settingsPath, { interval: 1000 }, () => this.reloadBudget())
+    } catch {
+      // missing settings file is fine; AI defaults apply
+    }
     ctx.on('dispose', () => {
       clearInterval(this.ticker)
       if (this.saveTimer !== null) clearTimeout(this.saveTimer)
+      try { unwatchFile(this.settingsPath) } catch { /* ignore */ }
       this.saveNow()
     })
   }
@@ -137,6 +150,34 @@ export class RuntimeService extends Service<Config> {
 
   cancelEvent(eventId: string): void {
     this.scheduler.cancel(eventId)
+  }
+
+  /** Read the editable group budget from the shared AI settings file. */
+  private readBudgetSettings(): { minIntervalMs?: number; maxPerWindow?: number; windowMs?: number } {
+    try {
+      const parsed = JSON.parse(readFileSync(this.settingsPath, 'utf8'))
+      if (parsed === null || typeof parsed !== 'object') return {}
+      const read = (key: string): number | undefined => {
+        const value = Number(parsed[key])
+        return Number.isFinite(value) ? value : undefined
+      }
+      return {
+        minIntervalMs: read('minIntervalMs'),
+        maxPerWindow: read('maxPerWindow'),
+        windowMs: read('windowMs'),
+      }
+    } catch {
+      return {}
+    }
+  }
+
+  private reloadBudget(): void {
+    const budget = this.readBudgetSettings()
+    this.groups.configure({
+      minIntervalMs: budget.minIntervalMs ?? this.config.minIntervalMs,
+      maxPerWindow: budget.maxPerWindow ?? this.config.maxPerWindow,
+      windowMs: budget.windowMs ?? this.config.windowMs,
+    })
   }
 
   /** Persist the lexicon immediately (called on dispose or by tests). */
