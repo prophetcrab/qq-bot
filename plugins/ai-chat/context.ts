@@ -5,7 +5,9 @@ import type { HistoryMessage } from './types.js'
 export function buildBackground(list: HistoryMessage[], limit: number): string {
   return list
     .slice(-Math.max(0, limit))
-    .map((message) => message.role === 'assistant' ? `- AI：${message.text}` : `- ${message.name ?? '群友'}：${message.text}`)
+    .map((message) => message.role === 'assistant'
+      ? `- AI：${message.text}`
+      : `- ${typeof message.name === 'string' && message.name.trim() !== '' ? message.name.trim() : '群友'}：${message.text}`)
     .join('\n')
 }
 

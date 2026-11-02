@@ -27,7 +27,7 @@ export const Config: Schema<Config> = Schema.object({
   replyProbability: Schema.number().default(0.15).min(0).max(1)
     .description('未被 @ / 回复 时的随机回复概率（0~1）'),
   followUpMinutes: Schema.number().default(3).min(0).max(60)
-    .description('回复某人后，多少分钟内继续回复此人的消息'),
+    .description('回复某人后的跟进窗口；窗口内只提高回复概率，不强制每条都回'),
   batchWindowMs: Schema.number().default(2500).min(0).max(10000)
     .description('同一个人连续消息的合并等待时间（毫秒），0 表示不合并'),
   batchMaxWaitMs: Schema.number().default(10000).min(0).max(30000)

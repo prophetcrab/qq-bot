@@ -13,16 +13,31 @@ export interface TriggerResult {
   shouldReply: boolean
   forced: boolean
   randomHit: boolean
-  reason: 'mention' | 'reply' | 'follow-up' | 'queued' | 'probability' | 'none'
+  reason: 'mention' | 'reply' | 'follow-up' | 'probability' | 'none'
 }
 
-export function decideTrigger(input: TriggerInput): TriggerResult {
+/**
+ * Decide whether a message gets a reply.
+ *
+ * Only an explicit @mention or a reply to the bot is forced. The follow-up
+ * window and an in-flight reply queue merely widen eligibility; they must not
+ * turn every message into a new reply, otherwise a talkative group gets one
+ * answer per sentence and different speakers get merged into one stream.
+ *
+ * @param {TriggerInput} input
+ * @param {() => number} [random] test seam
+ */
+export function decideTrigger(input: TriggerInput, random: () => number = Math.random): TriggerResult {
   const forced = input.mentioned || input.replied
-  const randomHit = !forced && !input.inFollowUp && !input.userBusy && input.hasContent
-    && Math.random() < input.replyProbability
-  const shouldReply = !input.isCommand && input.hasContent && (forced || input.inFollowUp || input.userBusy || randomHit)
-  const reason = forced
+  // A recent exchange with the bot raises the chance a little, but never to
+  // certainty. Explicit triggers above remain guaranteed.
+  const probability = input.inFollowUp
+    ? Math.min(1, input.replyProbability * 2)
+    : input.replyProbability
+  const randomHit = !forced && !input.userBusy && input.hasContent && random() < probability
+  const shouldReply = !input.isCommand && input.hasContent && (forced || randomHit)
+  const reason: TriggerResult['reason'] = forced
     ? (input.mentioned ? 'mention' : 'reply')
-    : input.inFollowUp ? 'follow-up' : input.userBusy ? 'queued' : randomHit ? 'probability' : 'none'
+    : randomHit ? (input.inFollowUp ? 'follow-up' : 'probability') : 'none'
   return { shouldReply, forced, randomHit, reason }
 }

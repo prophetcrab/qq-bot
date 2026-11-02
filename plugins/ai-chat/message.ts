@@ -85,5 +85,17 @@ export function extractQuote(session: any, selfId: string, imageLimit: number): 
 }
 
 export function senderName(session: any): string {
-  return String(session?.author?.name ?? session?.username ?? session?.userId ?? '群友')
+  const candidates = [
+    session?.author?.name,
+    session?.author?.nickname,
+    session?.event?.sender?.card,
+    session?.event?.sender?.nickname,
+    session?.username,
+    session?.userId,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim() !== '') return candidate.trim()
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) return String(candidate)
+  }
+  return '群友'
 }

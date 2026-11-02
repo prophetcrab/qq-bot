@@ -6,6 +6,9 @@ import { test, type TestContext } from 'node:test'
 import { App } from 'koishi'
 import mock from '@koishijs/plugin-mock'
 import * as aiChat from '../plugins/ai-chat/index.ts'
+import { decideTrigger } from '../plugins/ai-chat/trigger.ts'
+import { senderName } from '../plugins/ai-chat/message.ts'
+import { buildBackground } from '../plugins/ai-chat/context.ts'
 
 const SELF_ID = '10000'
 const GROUP = '123456'
@@ -110,16 +113,16 @@ test('概率为 1 时普通消息自动回复', async (t) => {
   assert.ok(calls[0].body.messages[0].text.includes('今天群里好热闹'))
 })
 
-test('回复某人后，3 分钟内继续回复此人的消息', async (t) => {
+test('回复某人后，跟进窗口不再强制每条消息都回复', async (t) => {
   const { app, calls } = await setup(t, { replyProbability: 0, followUpMinutes: 3 })
   await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
   assert.equal(calls.length, 1)
   const follow = await app.mock.client(USER, GROUP).receive('接着说')
-  assert.deepEqual(follow, ['这是 AI 的回复'])
-  assert.equal(calls.length, 2)
+  assert.deepEqual(follow, [])
+  assert.equal(calls.length, 1)
   const other = await app.mock.client(USER_B, GROUP).receive('另一个人的消息')
   assert.deepEqual(other, [])
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 1)
 })
 
 test('引用机器人的消息必定触发', async (t) => {
@@ -200,7 +203,7 @@ test('不同人的消息并发处理，不再出现“上一条还在处理”',
   assert.ok(![...first, ...second].some((reply) => String(reply).includes('上一条')))
 })
 
-test('同一个人连续消息按队列顺序处理，但不会提示上一条正在处理', async (t) => {
+test('同一个人连续消息不会因为回复队列而每条都触发', async (t) => {
   const { app } = await setup(t, { replyProbability: 1 })
   const calls = installDelayedFetch(60)
   const [first, second] = await Promise.all([
@@ -208,8 +211,8 @@ test('同一个人连续消息按队列顺序处理，但不会提示上一条�
     app.mock.client(USER, GROUP).receive('第二句'),
   ])
   assert.deepEqual(first, ['并发回复'])
-  assert.deepEqual(second, ['并发回复'])
-  assert.equal(calls.length, 2)
+  assert.deepEqual(second, [])
+  assert.equal(calls.length, 1)
   assert.ok(![...first, ...second].some((reply) => String(reply).includes('上一条')))
 })
 
@@ -314,14 +317,13 @@ test('@全体成员可以按概率自然参与', async (t) => {
   assert.equal(calls[0].body.mentionAll, true)
 })
 
-test('跟进窗口内 @别人 仍然继续回复', async (t) => {
+test('跟进窗口内 @别人 不再无条件回复', async (t) => {
   const { app, calls } = await setup(t, { replyProbability: 0, followUpMinutes: 3 })
   await app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`)
   assert.equal(calls.length, 1)
   const other = await app.mock.client(USER, GROUP).receive('<at id="999" name="小明"/> 你晚上来吗')
-  assert.deepEqual(other, ['这是 AI 的回复'])
-  assert.equal(calls.length, 2)
-  assert.deepEqual(calls[1].body.mentionOthers, ['小明'])
+  assert.deepEqual(other, [])
+  assert.equal(calls.length, 1)
 })
 
 
@@ -382,4 +384,32 @@ test('extractQuote：提取被引用消息的文字/图片/发送者', () => {
   assert.deepEqual(quote.imageUrls, [IMAGE_URL])
   assert.equal(quote.fromSelf, false)
   assert.equal(aiChat.extractQuote({ selfId: SELF_ID }, SELF_ID, 4), null)
+})
+
+
+test('trigger: follow-up raises the chance but does not force a reply', () => {
+  const base = {
+    isCommand: false,
+    hasContent: true,
+    mentioned: false,
+    replied: false,
+    inFollowUp: true,
+    userBusy: false,
+    replyProbability: 0.1,
+  }
+  assert.equal(decideTrigger(base, () => 0.15).shouldReply, true)
+  assert.equal(decideTrigger(base, () => 0.15).reason, 'follow-up')
+  assert.equal(decideTrigger(base, () => 0.25).shouldReply, false)
+  assert.equal(decideTrigger({ ...base, userBusy: true }, () => 0).shouldReply, false)
+  assert.equal(decideTrigger({ ...base, inFollowUp: false, userBusy: true }, () => 0).shouldReply, false)
+  assert.equal(decideTrigger({ ...base, inFollowUp: false, mentioned: true }, () => 1).shouldReply, true)
+})
+
+
+test('senderName: falls back through card, nickname and uid instead of empty names', () => {
+  assert.equal(senderName({ author: { name: '' }, event: { sender: { card: '群名片' } }, userId: '1' }), '群名片')
+  assert.equal(senderName({ author: { name: '', nickname: '昵称' }, userId: '1' }), '昵称')
+  assert.equal(senderName({ author: {}, username: '', userId: '20000' }), '20000')
+  assert.equal(senderName({}), '群友')
+  assert.match(buildBackground([{ role: 'user', name: '', text: '匿名' }], 10), /- 群友：匿名/u)
 })
