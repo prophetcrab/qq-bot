@@ -13,7 +13,6 @@ import { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf, 
 import { collectImageUrls, downloadImageUrls } from './media.js'
 import { postAi } from './gateway.js'
 import type { AiPayload } from './gateway.js'
-import { decideTrigger } from './trigger.js'
 import { buildBackground, collectBackgroundImages } from './context.js'
 import type { Discovery, HistoryMessage, PendingBatch } from './types.js'
 
@@ -23,14 +22,13 @@ export { collectMentions, describeSessionForModel, extractQuote, isReplyToSelf }
 export { collectImageUrls, downloadImageUrls, downloadImages } from './media.js'
 
 export const name = 'ai-chat'
-export const inject: string[] = []
+export const inject: string[] = ['qqbotRuntime']
 
 export function apply(ctx: Context, config: Config): void {
   const logger = ctx.logger('ai-chat')
   const history = new Map<string, HistoryMessage[]>()
   const replyQueues = new Map<string, Promise<void>>()
   const batches = new Map<string, PendingBatch>()
-  const followUntil = new Map<string, number>()
   const discoveryPath = resolve(process.cwd(), config.discoveryFile)
   const statePath = resolve(process.cwd(), config.stateFile)
   const settingsPath = resolve(process.cwd(), config.settingsFile)
@@ -124,6 +122,7 @@ export function apply(ctx: Context, config: Config): void {
       session: batch.lastSession,
       key: batch.key,
       name: batch.name,
+      threadId: batch.threadId,
       content: content !== '' ? content : '（对方发送了图片但没有文字）',
       imageUrls: batch.imageUrls,
       texts: batch.texts.length > 0 ? batch.texts : ['（对方发送了图片但没有文字）'],
@@ -144,6 +143,21 @@ export function apply(ctx: Context, config: Config): void {
     const isCommand = content.startsWith('/')
     const imageUrls = collectImageUrls(session, config.imageLimit)
     const userKey = followKey(session)
+    const mentions = collectMentions(session, String(session.selfId))
+    const mentioned = mentions.self
+    const replied = isReplyToSelf(session, String(session.selfId))
+    const hasContent = content !== '' || imageUrls.length > 0
+    const observation = ctx.qqbotRuntime.observeMessage({
+      messageId: String(session.messageId ?? `${key}:${Date.now()}`),
+      groupId: key,
+      userId: String(session.userId ?? ''),
+      userName: name,
+      text: content,
+      quoteMessageId: session.quote?.id ?? session.quote?.messageId ?? null,
+      at: Date.now(),
+      mentionSelf: mentioned,
+      replyToBot: replied,
+    })
     const activeBatch = batches.get(userKey)
     if (!isCommand && activeBatch !== undefined && (content !== '' || imageUrls.length > 0)) {
       if (content !== '') activeBatch.texts.push(content)
@@ -151,27 +165,14 @@ export function apply(ctx: Context, config: Config): void {
       activeBatch.imageUrls = activeBatch.imageUrls.slice(0, config.imageLimit)
       activeBatch.lastSession = session
       activeBatch.name = name
+      activeBatch.threadId = observation.thread.id
       scheduleBatch(userKey)
       return
     }
 
-    const mentions = collectMentions(session, String(session.selfId))
-    const mentioned = mentions.self
-    const replied = isReplyToSelf(session, String(session.selfId))
-    const inFollowUp = (followUntil.get(followKey(session)) ?? 0) > Date.now()
-    const hasContent = content !== '' || imageUrls.length > 0
-    const userBusy = replyQueues.has(followKey(session))
-    const trigger = decideTrigger({
-      isCommand,
-      hasContent,
-      mentioned,
-      replied,
-      inFollowUp,
-      userBusy,
-      replyProbability: runtime.replyProbability,
-    })
-    const shouldReply = trigger.shouldReply
-    const reason = trigger.reason
+    const forced = observation.forced
+    const shouldReply = !isCommand && hasContent && (forced || ctx.qqbotRuntime.shouldReply(observation, runtime.replyProbability))
+    const reason = observation.attention.decision
 
     state.lastInbound = {
       at: new Date().toISOString(),
@@ -183,7 +184,10 @@ export function apply(ctx: Context, config: Config): void {
       mentions: mentions.others,
       mentionAll: mentions.all,
       replyToBot: replied,
-      followUp: inFollowUp,
+      threadId: observation.thread.id,
+      keywordScore: observation.keywordScore,
+      attention: observation.attention.score,
+      attentionReasons: observation.attention.reasons,
       images: imageUrls.length,
       replyProbability: runtime.replyProbability,
       shouldReply,
@@ -205,13 +209,14 @@ export function apply(ctx: Context, config: Config): void {
         lastSession: session,
         key,
         name,
+        threadId: observation.thread.id,
         firstAt: Date.now(),
         timer: null,
       })
       scheduleBatch(userKey)
       return
     }
-    await enqueueReply(userKey, () => processReply({ session, key, name, content, imageUrls, texts: [content] }))
+    await enqueueReply(userKey, () => processReply({ session, key, name, threadId: observation.thread.id, content, imageUrls, texts: [content] }))
     return
   })
 
@@ -225,7 +230,7 @@ export function apply(ctx: Context, config: Config): void {
     return next
   }
 
-  async function processReply({ session, key, name, content, imageUrls, texts }: any): Promise<void> {
+  async function processReply({ session, key, name, threadId, content, imageUrls, texts }: any): Promise<void> {
     const prompt = content !== '' ? content : '（对方发送了图片但没有文字）'
     const endpoint = endpointOf()
     if (endpoint === null) {
@@ -297,15 +302,14 @@ export function apply(ctx: Context, config: Config): void {
       }
       const reply = sanitizeReplyText(String(data.reply).trim())
       if (reply === '') return
-      const followMs = runtime.followUpMinutes * 60 * 1000
-      if (followMs > 0) followUntil.set(followKey(session), Date.now() + followMs)
       const historyTexts = Array.isArray(texts) && texts.length > 0 ? texts : [current.text]
       const historyImages = Array.isArray(imageUrls) ? imageUrls : []
       historyTexts.forEach((text, index) => {
         pushHistory(key, { role: 'user', name, text, ...(index === 0 && historyImages.length > 0 ? { images: historyImages } : {}) })
       })
       pushHistory(key, { role: 'assistant', text: reply })
-      state.lastReply = { at: new Date().toISOString(), ok: true, replyPreview: reply.slice(0, 200), followUpUntil: followUntil.get(followKey(session)) ?? null }
+      ctx.qqbotRuntime.recordReply(key, threadId ?? null)
+      state.lastReply = { at: new Date().toISOString(), ok: true, replyPreview: reply.slice(0, 120) }
       persistState()
       for (const part of splitReply(reply, config.maxReplyChars)) {
         await session.send(part)

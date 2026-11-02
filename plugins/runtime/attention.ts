@@ -14,13 +14,13 @@ export function evaluateAttention(
   thresholds: AttentionThresholds = DEFAULT_THRESHOLDS,
 ): AttentionResult {
   const reasons: string[] = []
-  if (input.budgetExhausted === true) {
-    reasons.push('budget-exhausted')
-    return { score: 0, decision: 'low', reasons }
-  }
   if (input.forced === true) {
     reasons.push('forced')
     return { score: 1, decision: 'forced', reasons }
+  }
+  if (input.budgetExhausted === true) {
+    reasons.push('budget-exhausted')
+    return { score: 0, decision: 'low', reasons }
   }
   let score = 0
   if (input.direct === true) {

@@ -49,4 +49,8 @@ plugins:
     ./plugins/welcome:1g2s5g:
       message: 欢迎加入本群，发送 /help 查看机器人指令～
       onlyGroup: true
-    ~./plugins/runtime:runtime01: {}
+    ./plugins/runtime:runtime01:
+      shadow: false
+      minIntervalMs: 20000
+      maxPerWindow: 3
+      windowMs: 600000

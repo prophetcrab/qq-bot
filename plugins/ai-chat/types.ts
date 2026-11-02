@@ -32,6 +32,7 @@ export interface PendingBatch {
   lastSession: any
   key: string
   name: string
+  threadId?: string
   firstAt: number
   timer: any
 }

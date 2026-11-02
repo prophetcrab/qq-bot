@@ -6,6 +6,7 @@ import { test, type TestContext } from 'node:test'
 import { App } from 'koishi'
 import mock from '@koishijs/plugin-mock'
 import * as aiChat from '../plugins/ai-chat/index.ts'
+import * as runtime from '../plugins/runtime/index.ts'
 import { decideTrigger } from '../plugins/ai-chat/trigger.ts'
 import { senderName } from '../plugins/ai-chat/message.ts'
 import { buildBackground } from '../plugins/ai-chat/context.ts'
@@ -54,6 +55,7 @@ async function setup(t: TestContext, config: Record<string, any> = {}, runtimeSe
 
   const app = new App({ prefix: ['/'] })
   app.plugin(mock, { selfId: SELF_ID })
+  app.plugin(runtime as any, { shadow: false, minIntervalMs: 0, maxPerWindow: 100, windowMs: 60000 })
   app.plugin(aiChat as any, {
     discoveryFile,
     settingsFile,
@@ -204,10 +206,10 @@ test('不同人的消息并发处理，不再出现“上一条还在处理”',
 })
 
 test('同一个人连续消息不会因为回复队列而每条都触发', async (t) => {
-  const { app } = await setup(t, { replyProbability: 1 })
+  const { app } = await setup(t, { replyProbability: 0 })
   const calls = installDelayedFetch(60)
   const [first, second] = await Promise.all([
-    app.mock.client(USER, GROUP).receive('第一句'),
+    app.mock.client(USER, GROUP).receive(`<at id="${SELF_ID}"/> 第一句`),
     app.mock.client(USER, GROUP).receive('第二句'),
   ])
   assert.deepEqual(first, ['并发回复'])
