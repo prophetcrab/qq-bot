@@ -14,7 +14,7 @@ const SELF_ID = '10000'
 const GROUP = '123456'
 const USER = '20000'
 const USER_B = '20001'
-const IMAGE_URL = 'https://img.example.test/photo.png'
+const IMAGE_URL = 'https://93.184.216.34/photo.png'
 
 interface SetupResult { app: any; calls: any[]; imageRequests: string[] }
 
@@ -41,7 +41,7 @@ async function setup(t: TestContext, config: Record<string, any> = {}, runtimeSe
         ok: true,
         status: 200,
         headers: { get: () => 'image/png' },
-        arrayBuffer: async () => Buffer.from([137, 80, 78, 71]),
+        arrayBuffer: async () => Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       } as any
     }
     calls.push({ url: target, body: JSON.parse(init.body) })
