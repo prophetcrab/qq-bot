@@ -246,6 +246,7 @@ export function apply(ctx: Context, config: Config): void {
       const quotedUrls = (quote?.imageUrls ?? []).filter((url) => !currentUrls.includes(url))
       const quotedImages = quotedUrls.length > 0 ? await downloadImageUrls(quotedUrls, config) : []
       const payload: AiPayload = {
+        apiVersion: 1,
         messages,
         background,
         images,

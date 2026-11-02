@@ -3,6 +3,7 @@ import type { Config } from './config.js'
 import type { HistoryMessage } from './types.js'
 
 export interface AiPayload {
+  apiVersion: number
   messages: HistoryMessage[]
   background: string
   images: unknown[]
