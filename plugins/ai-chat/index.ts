@@ -267,7 +267,7 @@ export function apply(ctx: Context, config: Config): void {
     }
     const current: HistoryMessage = { role: 'user', name, text: prompt }
     const allHistory = history.get(key) ?? []
-    const conversation = conversationFor(allHistory, threadId, 8)
+    const conversation = conversationFor(allHistory, threadId)
     const conversationSet = new Set(conversation)
     const messages: HistoryMessage[] = [
       ...conversation.map((message) => ({

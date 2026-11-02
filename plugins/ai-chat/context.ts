@@ -23,12 +23,15 @@ export function collectBackgroundImages(list: HistoryMessage[], limit: number): 
 }
 
 
+/** Upper bound for completed multi-turn messages (user + assistant). */
+export const MAX_CONVERSATION_MESSAGES = 20
+
 /**
  * Completed conversation turns in one thread: include messages up to the last
  * assistant reply, but never trail behind a dead user-only tail. This keeps
  * the request a real dialogue instead of a pile of unanswered group messages.
  */
-export function conversationFor(list: HistoryMessage[], threadId: string | undefined, maxMessages = 8): HistoryMessage[] {
+export function conversationFor(list: HistoryMessage[], threadId: string | undefined, maxMessages = MAX_CONVERSATION_MESSAGES): HistoryMessage[] {
   if (typeof threadId !== 'string' || threadId === '') return []
   const relevant = list.filter((message) => message.threadId === threadId)
   let lastAssistant = -1

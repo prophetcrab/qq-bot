@@ -9,7 +9,7 @@ import * as aiChat from '../plugins/ai-chat/index.ts'
 import * as runtime from '../plugins/runtime/index.ts'
 import { decideTrigger } from '../plugins/ai-chat/trigger.ts'
 import { senderName } from '../plugins/ai-chat/message.ts'
-import { buildBackground } from '../plugins/ai-chat/context.ts'
+import { buildBackground, conversationFor } from '../plugins/ai-chat/context.ts'
 
 const SELF_ID = '10000'
 const GROUP = '123456'
@@ -451,4 +451,17 @@ test('senderName: falls back through card, nickname and uid instead of empty nam
   assert.equal(senderName({ author: {}, username: '', userId: '20000' }), '20000')
   assert.equal(senderName({}), '群友')
   assert.match(buildBackground([{ role: 'user', name: '', text: '匿名' }], 10), /- 群友：匿名/u)
+})
+
+
+test('conversationFor: keeps the latest 20 completed messages in one thread', () => {
+  const list = Array.from({ length: 31 }, (unused, index) => ({
+    role: index % 2 === 0 ? 'user' as const : 'assistant' as const,
+    text: `消息 ${index}`,
+    threadId: 'g:thread:1',
+  }))
+  const conversation = conversationFor(list, 'g:thread:1')
+  assert.equal(conversation.length, 20)
+  assert.equal(conversation[0].text, '消息 10')
+  assert.equal(conversation[19].text, '消息 29')
 })
