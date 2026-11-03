@@ -19,6 +19,7 @@ async function setup(t: TestContext) {
   globalThis.fetch = (async (url: any) => {
     const target = String(url)
     calls.push(target)
+    if (target.endsWith('/qqbot/game/command')) return { ok: true, status: 200, json: async () => ({ ok: true, replies: ['注册成功'] }) } as any
     if (target.endsWith('/analyze')) return { ok: true, status: 200, json: async () => ({ ok: true, speak: { enabled: false } }) } as any
     if (target.endsWith('/compose')) return { ok: true, status: 200, json: async () => ({ ok: true, text: '收到我在。', parts: ['收到', '我在。'] }) } as any
     return { ok: true, status: 200, json: async () => ({ ok: true }) } as any
@@ -70,4 +71,12 @@ test('a mention wakes the queue worker and sends a reply', async (t) => {
   assert.ok(analyzeAfter > analyzeBefore, 'a persona keyword must trigger analysis')
   const afterKeyword = JSON.parse(readFileSync(stateFile, 'utf8'))
   assert.ok(afterKeyword.loops.some((loop: any) => loop.trigger === 'keyword'))
+})
+
+test('slash registration bypasses the LLM analyze/compose loop', async (t) => {
+  const { app, calls } = await setup(t)
+  await app.mock.client('20000', 'g1').receive('/注册')
+  await new Promise((resolve) => setTimeout(resolve, 120))
+  assert.ok(calls.some((url) => url.endsWith('/qqbot/game/command')))
+  assert.equal(calls.filter((url) => url.endsWith('/analyze')).length, 0)
 })

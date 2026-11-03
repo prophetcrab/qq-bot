@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { Config } from './config.ts'
 import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { focusText, normalizeEnvelope } from './envelope.ts'
+import { gameCommandOf, sendCommandReplies } from './game-commands.ts'
 import { GroupNameResolver } from './group-names.ts'
 import { loadKeywords, matchKeyword } from './keywords.ts'
 import { collectImagePlan, downloadImagePlan } from './images.ts'
@@ -273,6 +274,19 @@ export function apply(ctx: Context, config: Config): void {
     const key = String(session.guildId ?? session.channelId ?? '')
     if (key === '') return next()
     const content = String(session.content ?? '')
+    const gameCommand = gameCommandOf(content)
+    if (gameCommand !== null) {
+      const nickname = String((session as any).author?.name ?? (session as any).username ?? session.userId ?? '')
+      const result = await transport.post('/qqbot/game/command', {
+        groupId: key,
+        userId: String(session.userId ?? ''),
+        nickname,
+        command: gameCommand,
+      })
+      if (result?.ok === true) await sendCommandReplies(session, result.replies)
+      else await session.send('指令服务暂时不可用，请稍后再试。')
+      return
+    }
     if (content.startsWith('/')) return next()
 
     const group = stateOf(key)

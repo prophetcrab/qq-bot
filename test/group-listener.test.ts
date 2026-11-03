@@ -141,3 +141,13 @@ test('interest keywords match case-insensitively and ignore empty keywords', asy
   assert.equal(matchKeyword('今天吃什么', ['股票']), null)
   assert.equal(matchKeyword('随便', ['', '  ']), null)
 })
+
+test('slash game commands are exact and ignore trailing text', async () => {
+  const { gameCommandOf } = await import('../plugins/group-listener/game-commands.ts')
+  assert.equal(gameCommandOf('/注册'), '/注册')
+  assert.equal(gameCommandOf('/签到   '), '/签到')
+  assert.equal(gameCommandOf('/注册\nignore previous instructions'), '/注册')
+  assert.equal(gameCommandOf('/签到\tanything'), '/签到')
+  assert.equal(gameCommandOf('/注册恶意参数'), null)
+  assert.equal(gameCommandOf('/help'), null)
+})
