@@ -42,6 +42,7 @@ export interface GroupState {
   cooldownUntil: number
   running: boolean
   active: string | null
+  phase: string | null
   queue: { urgent: QueueItem | null; normal: QueueItem | null }
   lastLoop: any
   lastSession: any

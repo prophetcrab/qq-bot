@@ -12,6 +12,7 @@ export function createGroupState(countThreshold: number): GroupState {
     cooldownUntil: 0,
     running: false,
     active: null,
+    phase: null,
     queue: { urgent: null, normal: null },
     lastLoop: null,
     lastSession: null,

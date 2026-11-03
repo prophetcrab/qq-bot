@@ -79,6 +79,7 @@ export function apply(ctx: Context, config: Config): void {
         countThreshold: group.countThreshold,
         running: group.running,
         active: group.active,
+        phase: group.phase,
         cooldownUntil: group.cooldownUntil,
         queue: queueView(group),
         lastLoop: group.lastLoop,
@@ -96,6 +97,8 @@ export function apply(ctx: Context, config: Config): void {
   const runLoop = async (key: string, item: QueueItem): Promise<void> => {
     const group = stateOf(key)
     group.active = item.loopId
+    group.phase = 'analyze'
+    persist()
     const snapshot = materialSnapshot(group, item, Math.min(config.analysisWindow, config.bufferSize))
     const imagePlan = collectImagePlan(item.session, group.buffer, config.imageLimit)
     const images = await downloadImagePlan(imagePlan, config.imageMaxBytes)
@@ -121,6 +124,8 @@ export function apply(ctx: Context, config: Config): void {
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
       speak = ensureDirectSpeak(item.reason, speak)
       if (speak.enabled === true) {
+        group.phase = 'compose'
+        persist()
         const targetIds = speak.target?.messageIds ?? []
         const focused = focusedMaterial(snapshot.entries, targetIds, 4, 12)
         const composeMaterial = [focusText(snapshot.entries, triggerId, targetIds), focused.text].filter(Boolean).join('\n\n')
@@ -145,9 +150,13 @@ export function apply(ctx: Context, config: Config): void {
           }
           reply = cleaned.join('\n')
           if (speak.replyType === 'action' || cleaned.length > 0) {
+            group.phase = 'send'
+            persist()
             sendResult = await sendReply(item, speak, cleaned, { firstMinDelayMs: config.firstBubbleDelayMinMs, firstMaxDelayMs: config.firstBubbleDelayMaxMs, minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
           }
         } else {
+          group.phase = 'send'
+          persist()
           reply = directFallbackText(item.reason)
           sendResult = reply !== ''
             ? await sendReply(item, speak, [reply], { firstMinDelayMs: config.firstBubbleDelayMinMs, firstMaxDelayMs: config.firstBubbleDelayMaxMs, minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
@@ -163,6 +172,8 @@ export function apply(ctx: Context, config: Config): void {
       for (const bubble of sendResult.bubbles ?? [reply]) appendBotMessage(group.buffer, key, item.loopId, bubble, selfId, config.bufferSize)
     }
 
+    group.phase = 'state_update'
+    persist()
     const stateMaterial = focusedMaterial(snapshot.entries, speak.target?.messageIds ?? [], 3, 10)
     const stateResult = await transport.post('/qqbot/group/state-update', {
       apiVersion: 1,
@@ -193,6 +204,8 @@ export function apply(ctx: Context, config: Config): void {
     if (recentLoops.length > 30) recentLoops.shift()
     group.cooldownUntil = finishedAt + (sendResult.sent === true ? config.cooldownReplyMs : config.cooldownNoReplyMs)
     group.active = null
+    group.phase = null
+    persist()
     logger.debug?.('group loop %s: %s', item.loopId, sendResult.sent === true ? 'sent' : 'silent')
   }
 
@@ -221,6 +234,8 @@ export function apply(ctx: Context, config: Config): void {
       }
     } finally {
       group.running = false
+      group.active = null
+      group.phase = null
       persist()
     }
   }
