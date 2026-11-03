@@ -122,7 +122,8 @@ export function apply(ctx: Context, config: Config): void {
         backgroundImages: images.background,
       })
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
-      speak = ensureDirectSpeak(item.reason, speak)
+      const senderQq = String(item.session?.userId ?? item.session?.author?.id ?? '')
+      speak = ensureDirectSpeak(item.reason, speak, { messageId: triggerId, userId: senderQq })
       if (speak.enabled === true && speak.replyType === 'action') {
         group.phase = 'send'
         persist()

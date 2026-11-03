@@ -58,6 +58,10 @@ test('a mention wakes the queue worker and sends a reply', async (t) => {
   assert.equal(status.loops.length, 1)
   assert.equal(status.loops[0].sendResult.sent, true)
   assert.equal(status.loops[0].sendResult.parts, 2)
+  assert.equal(status.loops[0].speak.kind, 'reply')
+  assert.equal(status.loops[0].speak.replyType, 'at')
+  assert.deepEqual(status.loops[0].speak.target.userIds, ['20000'])
+  assert.equal(status.loops[0].speak.target.messageIds.length, 1)
 
   const analyzeBefore = calls.filter((url) => url.endsWith('/analyze')).length
   await app.mock.client('20000', 'g1').receive('今天股票又跌了')
