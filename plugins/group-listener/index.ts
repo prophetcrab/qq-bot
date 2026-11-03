@@ -54,7 +54,7 @@ export function apply(ctx: Context, config: Config): void {
   const recentLoops: any[] = []
   const semaphore = new GroupSemaphore(config.maxConcurrentGroups)
   const names = new GroupNameResolver()
-  const transport = new DshTransport({ endpoint: config.endpoint, discoveryFile: config.discoveryFile })
+  const transport = new DshTransport({ endpoint: config.endpoint, discoveryFile: config.discoveryFile, timeoutMs: config.requestTimeoutMs })
   const keywords = loadKeywords(config.personaFile)
   const global = { get active() { return semaphore.active }, get waiting() { return semaphore.waiting } }
 

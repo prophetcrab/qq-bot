@@ -1,16 +1,16 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const REQUEST_TIMEOUT_MS = 120_000
+const DEFAULT_TIMEOUT_MS = 45_000
 
 /** HTTP client for the DSH group-loop endpoints, with discovery-file lookup. */
 export class DshTransport {
   private endpoint: string
 
-  private readonly options: { endpoint: string; discoveryFile: string }
+  private readonly options: { endpoint: string; discoveryFile: string; timeoutMs: number }
 
-  constructor(options: { endpoint: string; discoveryFile: string }) {
-    this.options = options
+  constructor(options: { endpoint: string; discoveryFile: string; timeoutMs?: number }) {
+    this.options = { ...options, timeoutMs: Number.isFinite(options.timeoutMs) ? Math.max(5000, Number(options.timeoutMs)) : DEFAULT_TIMEOUT_MS }
     this.endpoint = options.endpoint
   }
 
@@ -31,7 +31,7 @@ export class DshTransport {
     const origin = this.origin()
     if (origin === '') return { ok: false, error: 'DSH endpoint not ready' }
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs)
     timer.unref?.()
     try {
       const response = await fetch(`${origin}${path}`, {
