@@ -1,4 +1,4 @@
-import type { Envelope, Participant, Sender } from './types.js'
+import type { Envelope, Participant, Sender } from './types.ts'
 
 const MAX_TEXT = 2000
 const MAX_FORWARD_MESSAGES = 20

@@ -7,7 +7,10 @@ const REQUEST_TIMEOUT_MS = 120_000
 export class DshTransport {
   private endpoint: string
 
-  constructor(private readonly options: { endpoint: string; discoveryFile: string }) {
+  private readonly options: { endpoint: string; discoveryFile: string }
+
+  constructor(options: { endpoint: string; discoveryFile: string }) {
+    this.options = options
     this.endpoint = options.endpoint
   }
 

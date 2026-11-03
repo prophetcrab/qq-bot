@@ -59,3 +59,4 @@ test('group name resolver caches OneBot group names', async () => {
   assert.equal(state.name, '测试群')
   assert.equal(await resolver.resolve(bot, 'g1'), '测试群')
 })
+

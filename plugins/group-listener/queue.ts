@@ -1,5 +1,5 @@
-import { participantsOf, renderMaterial } from './envelope.js'
-import type { Envelope, GroupState, Participant, QueueItem, QueuePriority, TriggerReason } from './types.js'
+import { participantsOf, renderMaterial } from './envelope.ts'
+import type { Envelope, GroupState, Participant, QueueItem, QueuePriority, TriggerReason } from './types.ts'
 
 export function createGroupState(): GroupState {
   return {

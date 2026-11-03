@@ -1,4 +1,4 @@
-import type { TriggerReason } from './types.js'
+import type { TriggerReason } from './types.ts'
 
 const DIRECT_FALLBACK_TEXT = '我在，怎么了？'
 

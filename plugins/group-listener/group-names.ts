@@ -1,4 +1,4 @@
-import type { GroupState } from './types.js'
+import type { GroupState } from './types.ts'
 
 const CACHE_TTL_MS = 5 * 60 * 1000
 

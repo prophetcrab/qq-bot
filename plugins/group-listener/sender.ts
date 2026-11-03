@@ -1,5 +1,5 @@
 import { h } from 'koishi'
-import type { Envelope, QueueItem } from './types.js'
+import type { Envelope, QueueItem } from './types.ts'
 
 export interface SendResult {
   sent: boolean

@@ -2,19 +2,19 @@
 import { Context } from 'koishi'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
-import { Config } from './config.js'
-import { directFallbackText, ensureDirectSpeak } from './direct.js'
-import { normalizeEnvelope } from './envelope.js'
-import { GroupNameResolver } from './group-names.js'
-import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, takeItem } from './queue.js'
-import { appendBotMessage, sendReply } from './sender.js'
-import { DshTransport } from './transport.js'
-import type { GroupState, QueueItem } from './types.js'
+import { Config } from './config.ts'
+import { directFallbackText, ensureDirectSpeak } from './direct.ts'
+import { normalizeEnvelope } from './envelope.ts'
+import { GroupNameResolver } from './group-names.ts'
+import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, takeItem } from './queue.ts'
+import { appendBotMessage, sendReply } from './sender.ts'
+import { DshTransport } from './transport.ts'
+import type { GroupState, QueueItem } from './types.ts'
 
 export const name = 'group-listener'
 export const inject: string[] = []
-export { Config } from './config.js'
-export { directFallbackText, ensureDirectSpeak } from './direct.js'
+export { Config } from './config.ts'
+export { directFallbackText, ensureDirectSpeak } from './direct.ts'
 
 const TICK_MS = 15_000
 const RETENTION_MS = 30_000
@@ -24,7 +24,9 @@ class GroupSemaphore {
   active = 0
   private waiters: Array<() => void> = []
 
-  constructor(private readonly limit: number) {}
+  private readonly limit: number
+
+  constructor(limit: number) { this.limit = limit }
 
   get waiting(): number { return this.waiters.length }
 
@@ -224,8 +226,13 @@ export function apply(ctx: Context, config: Config): void {
 
     const mentioned = Array.isArray(session.elements) && session.elements.some((element: any) => element.type === 'at' && String(element.attrs?.id ?? element.attrs?.qq ?? '') === String(session.selfId))
     const replied = String((session.quote as any)?.user?.id ?? (session.quote as any)?.userId ?? '') === String(session.selfId)
-    if (mentioned || replied) enqueueDirect(group, envelope.id, session, mentioned ? 'mention' : 'reply')
-    else if (group.unprocessed >= config.countTrigger) enqueueNormal(group, envelope.id, session, 'count')
+    if (mentioned || replied) {
+      enqueueDirect(group, envelope.id, session, mentioned ? 'mention' : 'reply')
+      void wake(key)
+    } else if (group.unprocessed >= config.countTrigger) {
+      const queued = enqueueNormal(group, envelope.id, session, 'count')
+      if (queued !== null) void wake(key)
+    }
     persist()
     return next()
   })
@@ -243,7 +250,10 @@ export function apply(ctx: Context, config: Config): void {
       if (group.running || group.unprocessed === 0 || group.senders.size < 2) continue
       if (now - group.lastTriggerAt < config.timeTriggerMinutes * 60 * 1000) continue
       const latest = group.buffer[group.buffer.length - 1]
-      if (latest !== undefined && group.lastSession !== null) enqueueNormal(group, latest.id, group.lastSession, 'time')
+      if (latest !== undefined && group.lastSession !== null) {
+        const queued = enqueueNormal(group, latest.id, group.lastSession, 'time')
+        if (queued !== null) void wake(key)
+      }
     }
   }, TICK_MS)
   ticker.unref?.()
