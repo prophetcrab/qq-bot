@@ -53,8 +53,10 @@ plugins:
       bufferSize: 100
       cooldownReplyMs: 25000
       cooldownNoReplyMs: 7000
-      bubbleDelayMinMs: 300
-      bubbleDelayMaxMs: 1200
+      firstBubbleDelayMinMs: 1200
+      firstBubbleDelayMaxMs: 3000
+      bubbleDelayMinMs: 800
+      bubbleDelayMaxMs: 2200
       imageLimit: 4
       imageMaxBytes: 4194304
       maxConcurrentGroups: 3

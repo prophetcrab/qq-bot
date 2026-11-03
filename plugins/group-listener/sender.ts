@@ -12,15 +12,17 @@ export interface SendResult {
 }
 
 export interface SendTiming {
+  firstMinDelayMs: number
+  firstMaxDelayMs: number
   minDelayMs: number
   maxDelayMs: number
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-function bubbleDelay(text: string, timing: SendTiming): number {
-  const natural = timing.minDelayMs + text.length * 15
-  return Math.min(timing.maxDelayMs, Math.max(timing.minDelayMs, natural))
+function bubbleDelay(text: string, minDelayMs: number, maxDelayMs: number): number {
+  const natural = minDelayMs + text.length * 20
+  return Math.min(maxDelayMs, Math.max(minDelayMs, natural))
 }
 
 function normalizeParts(input: string | string[]): string[] {
@@ -52,7 +54,10 @@ export async function sendReply(item: QueueItem, speak: any, input: string | str
   let failedParts = 0
   let lastError = ''
   for (let index = 0; index < parts.length; index += 1) {
-    await sleep(bubbleDelay(parts[index], timing))
+    const isFirst = index === 0
+    await sleep(isFirst
+      ? bubbleDelay(parts[index], timing.firstMinDelayMs, timing.firstMaxDelayMs)
+      : bubbleDelay(parts[index], timing.minDelayMs, timing.maxDelayMs))
     let content: any = parts[index]
     if (index === 0 && speak.replyType === 'quote' && speak.target?.messageIds?.[0]) {
       content = h('quote', { id: speak.target.messageIds[0] }) + content

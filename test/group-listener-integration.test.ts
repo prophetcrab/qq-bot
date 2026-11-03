@@ -30,6 +30,8 @@ async function setup(t: TestContext) {
     maxCountTrigger: 100,
     cooldownReplyMs: 1,
     cooldownNoReplyMs: 1,
+    firstBubbleDelayMinMs: 0,
+    firstBubbleDelayMaxMs: 0,
     bubbleDelayMinMs: 0,
     bubbleDelayMaxMs: 0,
   })

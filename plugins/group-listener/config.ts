@@ -9,6 +9,8 @@ export interface Config {
   timeTriggerMinutes: number
   cooldownReplyMs: number
   cooldownNoReplyMs: number
+  firstBubbleDelayMinMs: number
+  firstBubbleDelayMaxMs: number
   bubbleDelayMinMs: number
   bubbleDelayMaxMs: number
   imageLimit: number
@@ -28,8 +30,10 @@ export const Config: Schema<Config> = Schema.object({
   timeTriggerMinutes: Schema.number().default(30).min(1).max(240).description('时间触发窗口（分钟）'),
   cooldownReplyMs: Schema.number().default(25000).min(0).max(300000).description('发言后的群冷却'),
   cooldownNoReplyMs: Schema.number().default(7000).min(0).max(300000).description('不发言后的群冷却'),
-  bubbleDelayMinMs: Schema.number().default(300).min(0).max(5000).description('气泡最短间隔'),
-  bubbleDelayMaxMs: Schema.number().default(1200).min(0).max(10000).description('气泡最长间隔'),
+  firstBubbleDelayMinMs: Schema.number().default(1200).min(0).max(10000).description('首条气泡最短延迟'),
+  firstBubbleDelayMaxMs: Schema.number().default(3000).min(0).max(15000).description('首条气泡最长延迟'),
+  bubbleDelayMinMs: Schema.number().default(800).min(0).max(10000).description('后续气泡最短间隔'),
+  bubbleDelayMaxMs: Schema.number().default(2200).min(0).max(15000).description('后续气泡最长间隔'),
   imageLimit: Schema.number().default(4).min(0).max(4).description('每轮最多附带图片数'),
   imageMaxBytes: Schema.number().default(4 * 1024 * 1024).min(1024 * 1024).max(10 * 1024 * 1024).description('单张图片最大字节数'),
   maxConcurrentGroups: Schema.number().default(3).min(1).max(20).description('群间并发的最大群数'),

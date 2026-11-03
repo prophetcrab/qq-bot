@@ -136,12 +136,12 @@ export function apply(ctx: Context, config: Config): void {
           }
           reply = cleaned.join('\n')
           if (speak.replyType === 'action' || cleaned.length > 0) {
-            sendResult = await sendReply(item, speak, cleaned, { minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
+            sendResult = await sendReply(item, speak, cleaned, { firstMinDelayMs: config.firstBubbleDelayMinMs, firstMaxDelayMs: config.firstBubbleDelayMaxMs, minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
           }
         } else {
           reply = directFallbackText(item.reason)
           sendResult = reply !== ''
-            ? await sendReply(item, speak, [reply], { minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
+            ? await sendReply(item, speak, [reply], { firstMinDelayMs: config.firstBubbleDelayMinMs, firstMaxDelayMs: config.firstBubbleDelayMaxMs, minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
             : { sent: false, reason: 'compose_failed', error: composed?.error }
         }
       }
