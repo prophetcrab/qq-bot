@@ -187,7 +187,12 @@ export function apply(ctx: Context, config: Config): void {
 
     group.phase = 'state_update'
     persist()
-    const stateMaterial = focusedMaterial(snapshot.entries, speak.target?.messageIds ?? [], 3, 10)
+    const visibleIds = new Set(snapshot.entries.map((entry) => entry.id))
+    const stateIds = [...new Set([
+      ...(Array.isArray(speak.focus?.messageIds) ? speak.focus.messageIds : []).filter((id: string) => visibleIds.has(id)),
+      ...(Array.isArray(speak.target?.messageIds) ? speak.target.messageIds : []).filter((id: string) => visibleIds.has(id)),
+    ])].slice(0, 4)
+    const stateMaterial = focusedMaterial(snapshot.entries, stateIds, 3, 10)
     const stateResult = await transport.post('/qqbot/group/state-update', {
       apiVersion: 1,
       loopId: item.loopId,
