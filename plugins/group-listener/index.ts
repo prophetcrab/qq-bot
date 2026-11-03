@@ -6,6 +6,7 @@ import { Config } from './config.ts'
 import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { focusText, normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
+import { loadKeywords, matchKeyword } from './keywords.ts'
 import { collectImagePlan, downloadImagePlan } from './images.ts'
 import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, focusedMaterial, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
 import { appendBotMessage, sendReply } from './sender.ts'
@@ -54,6 +55,7 @@ export function apply(ctx: Context, config: Config): void {
   const semaphore = new GroupSemaphore(config.maxConcurrentGroups)
   const names = new GroupNameResolver()
   const transport = new DshTransport({ endpoint: config.endpoint, discoveryFile: config.discoveryFile })
+  const keywords = loadKeywords(config.personaFile)
   const global = { get active() { return semaphore.active }, get waiting() { return semaphore.waiting } }
 
   const nextThreshold = (): number => randomCountThreshold(config.minCountTrigger, config.maxCountTrigger)
@@ -199,7 +201,7 @@ export function apply(ctx: Context, config: Config): void {
       for (;;) {
         const item = peekNext(group)
         if (item === null) break
-        if (item.priority === 'normal' && Date.now() < group.cooldownUntil) {
+        if (item.priority === 'normal' && item.reason !== 'keyword' && Date.now() < group.cooldownUntil) {
           await new Promise((resolve) => setTimeout(resolve, Math.min(RETENTION_MS, Math.max(1, group.cooldownUntil - Date.now()))))
           continue
         }
@@ -256,6 +258,12 @@ export function apply(ctx: Context, config: Config): void {
       enqueueDirect(group, envelope.id, session, mentioned ? 'mention' : 'reply')
       resetCounters(group, nextThreshold())
       void wake(key)
+    } else if (matchKeyword(envelope.content.text, keywords) !== null) {
+      const queued = enqueueNormal(group, envelope.id, session, 'keyword')
+      if (queued !== null) {
+        resetCounters(group, nextThreshold())
+        void wake(key)
+      }
     } else if (group.unprocessed >= group.countThreshold) {
       const queued = enqueueNormal(group, envelope.id, session, 'count')
       if (queued !== null) {

@@ -126,3 +126,11 @@ test('focus text names the current sender and target messages explicitly', async
   assert.match(focus, /第二句/u)
   assert.match(focus, /第一句/u)
 })
+
+test('interest keywords match case-insensitively and ignore empty keywords', async () => {
+  const { matchKeyword } = await import('../plugins/group-listener/keywords.ts')
+  assert.equal(matchKeyword('今天大盘又绿了', ['股票', '大盘']), '大盘')
+  assert.equal(matchKeyword('K线画得不错', ['k线']), 'k线')
+  assert.equal(matchKeyword('今天吃什么', ['股票']), null)
+  assert.equal(matchKeyword('随便', ['', '  ']), null)
+})

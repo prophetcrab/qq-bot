@@ -52,6 +52,7 @@ plugins:
       timeTriggerMinutes: 30
       bufferSize: 100
       analysisWindow: 30
+      personaFile: data/config/persona.json
       cooldownReplyMs: 25000
       cooldownNoReplyMs: 7000
       firstBubbleDelayMinMs: 1200

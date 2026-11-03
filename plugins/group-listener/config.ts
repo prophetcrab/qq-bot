@@ -19,6 +19,7 @@ export interface Config {
   maxConcurrentGroups: number
   discoveryFile: string
   stateFile: string
+  personaFile: string
   endpoint: string
 }
 
@@ -41,5 +42,6 @@ export const Config: Schema<Config> = Schema.object({
   maxConcurrentGroups: Schema.number().default(3).min(1).max(20).description('群间并发的最大群数'),
   discoveryFile: Schema.string().default('data/state/ai.json').description('DSH AI 发现文件'),
   stateFile: Schema.string().default('data/state/group-listener-status.json').description('监听诊断状态文件'),
+  personaFile: Schema.string().default('data/config/persona.json').description('人设文件，读取兴趣关键词'),
   endpoint: Schema.string().default('').description('DSH 地址；留空读取 discoveryFile'),
 })

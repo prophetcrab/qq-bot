@@ -52,7 +52,7 @@ export function enqueueDirect(group: GroupState, messageId: string, session: any
 }
 
 
-export function enqueueNormal(group: GroupState, messageId: string, session: any, reason: 'count' | 'time'): QueueItem | null {
+export function enqueueNormal(group: GroupState, messageId: string, session: any, reason: 'count' | 'time' | 'keyword'): QueueItem | null {
   if (group.queue.urgent !== null) return null
   if (group.queue.normal !== null) {
     group.queue.normal.triggerMessageIds = [...new Set([...group.queue.normal.triggerMessageIds, messageId])]

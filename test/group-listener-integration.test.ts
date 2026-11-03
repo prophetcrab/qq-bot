@@ -9,6 +9,8 @@ import * as groupListener from '../plugins/group-listener/index.ts'
 
 async function setup(t: TestContext) {
   const dir = mkdtempSync(join(tmpdir(), 'qqbot-listener-'))
+  const personaFile = join(dir, 'persona.json')
+  writeFileSync(personaFile, JSON.stringify({ keywords: ['股票', '期货', '漫画'] }), 'utf8')
   const discoveryFile = join(dir, 'data', 'state', 'ai.json')
   mkdirSync(dirname(discoveryFile), { recursive: true })
   writeFileSync(discoveryFile, JSON.stringify({ endpoint: 'http://127.0.0.1:9/qqbot/ai/chat' }), 'utf8')
@@ -25,6 +27,7 @@ async function setup(t: TestContext) {
   app.plugin(mock, { selfId: '10000' })
   app.plugin(groupListener as any, {
     discoveryFile,
+    personaFile,
     stateFile: join(dir, 'status.json'),
     minCountTrigger: 100,
     maxCountTrigger: 100,
@@ -55,4 +58,12 @@ test('a mention wakes the queue worker and sends a reply', async (t) => {
   assert.equal(status.loops.length, 1)
   assert.equal(status.loops[0].sendResult.sent, true)
   assert.equal(status.loops[0].sendResult.parts, 2)
+
+  const analyzeBefore = calls.filter((url) => url.endsWith('/analyze')).length
+  await app.mock.client('20000', 'g1').receive('今天股票又跌了')
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  const analyzeAfter = calls.filter((url) => url.endsWith('/analyze')).length
+  assert.ok(analyzeAfter > analyzeBefore, 'a persona keyword must trigger analysis')
+  const afterKeyword = JSON.parse(readFileSync(stateFile, 'utf8'))
+  assert.ok(afterKeyword.loops.some((loop: any) => loop.trigger === 'keyword'))
 })

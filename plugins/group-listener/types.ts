@@ -1,6 +1,6 @@
 /** Shared wire and in-memory types for the group listener. */
 
-export type TriggerReason = 'mention' | 'reply' | 'count' | 'time'
+export type TriggerReason = 'mention' | 'reply' | 'count' | 'time' | 'keyword'
 export type QueuePriority = 'urgent' | 'normal'
 
 export interface Sender {
