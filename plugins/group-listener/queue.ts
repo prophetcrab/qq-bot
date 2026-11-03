@@ -81,6 +81,7 @@ export interface MaterialSnapshot {
   text: string
   participants: Participant[]
   count: number
+  entries: Envelope[]
 }
 
 export function materialSnapshot(group: GroupState, item: QueueItem, limit: number): MaterialSnapshot {
@@ -89,7 +90,25 @@ export function materialSnapshot(group: GroupState, item: QueueItem, limit: numb
   const entries = index >= 0
     ? group.buffer.slice(Math.max(0, index - limit + 1), index + 1)
     : group.buffer.slice(-limit)
-  return { text: renderMaterial(entries), participants: participantsOf(entries), count: entries.length }
+  return { text: renderMaterial(entries), participants: participantsOf(entries), count: entries.length, entries }
+}
+
+/** Keep only the target messages and their nearby context for generation. */
+export function focusedMaterial(entries: Envelope[], targetIds: string[], radius = 4, max = 12): MaterialSnapshot {
+  const source = Array.isArray(entries) ? entries : []
+  const wanted = new Set((Array.isArray(targetIds) ? targetIds : []).filter((id) => typeof id === 'string'))
+  const indexes = new Set<number>()
+  if (wanted.size > 0) {
+    source.forEach((entry, index) => {
+      if (!wanted.has(entry.id)) return
+      for (let at = Math.max(0, index - radius); at <= Math.min(source.length - 1, index + radius); at += 1) indexes.add(at)
+    })
+  }
+  if (indexes.size === 0) {
+    for (let at = Math.max(0, source.length - 6); at < source.length; at += 1) indexes.add(at)
+  }
+  const selected = [...indexes].sort((a, b) => a - b).slice(0, max).map((index) => source[index])
+  return { text: renderMaterial(selected), participants: participantsOf(selected), count: selected.length, entries: selected }
 }
 
 export function queueView(group: GroupState): { urgent: string | null; normal: string | null } {

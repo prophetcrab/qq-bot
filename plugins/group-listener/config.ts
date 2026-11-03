@@ -4,6 +4,7 @@ export interface Config {
   enabled: boolean
   groupOnly: boolean
   bufferSize: number
+  analysisWindow: number
   minCountTrigger: number
   maxCountTrigger: number
   timeTriggerMinutes: number
@@ -25,6 +26,7 @@ export const Config: Schema<Config> = Schema.object({
   enabled: Schema.boolean().default(true).description('是否启用群聊监听'),
   groupOnly: Schema.boolean().default(true).description('只监听群聊'),
   bufferSize: Schema.number().default(100).min(20).max(200).description('每群素材缓冲上限'),
+  analysisWindow: Schema.number().default(30).min(10).max(80).description('分析阶段最近消息窗口'),
   minCountTrigger: Schema.number().default(3).min(1).max(100).description('随机消息数触发下限'),
   maxCountTrigger: Schema.number().default(10).min(1).max(100).description('随机消息数触发上限'),
   timeTriggerMinutes: Schema.number().default(30).min(1).max(240).description('时间触发窗口（分钟）'),

@@ -51,6 +51,7 @@ plugins:
       maxCountTrigger: 10
       timeTriggerMinutes: 30
       bufferSize: 100
+      analysisWindow: 30
       cooldownReplyMs: 25000
       cooldownNoReplyMs: 7000
       firstBubbleDelayMinMs: 1200

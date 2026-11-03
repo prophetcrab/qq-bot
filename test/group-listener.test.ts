@@ -98,3 +98,18 @@ test('image plan downloads a magic-byte checked image', async () => {
     globalThis.fetch = originalFetch
   }
 })
+
+test('focused material keeps the target window instead of the full analysis buffer', async () => {
+  const { focusedMaterial } = await import('../plugins/group-listener/queue.ts')
+  const entries = Array.from({ length: 20 }, (_, index) => ({
+    id: `m${index}`, groupId: 'g1', sender: { qq: '20000', nickname: '小明' }, sentAt: { iso: '', unix: index }, receivedAt: '',
+    content: { text: `消息${index}`, quote: null, forward: null, attachments: [] },
+  }))
+  const focused = focusedMaterial(entries, ['m8'], 2, 12)
+  const ids = focused.entries.map((entry) => entry.id)
+  assert.ok(ids.includes('m6'))
+  assert.ok(ids.includes('m8'))
+  assert.ok(ids.includes('m10'))
+  assert.ok(!ids.includes('m0'))
+  assert.ok(focused.count <= 5)
+})

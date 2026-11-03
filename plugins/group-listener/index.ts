@@ -7,7 +7,7 @@ import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
 import { collectImagePlan, downloadImagePlan } from './images.ts'
-import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
+import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, focusedMaterial, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
 import { appendBotMessage, sendReply } from './sender.ts'
 import { DshTransport } from './transport.ts'
 import type { GroupState, QueueItem } from './types.ts'
@@ -94,7 +94,7 @@ export function apply(ctx: Context, config: Config): void {
   const runLoop = async (key: string, item: QueueItem): Promise<void> => {
     const group = stateOf(key)
     group.active = item.loopId
-    const snapshot = materialSnapshot(group, item, config.bufferSize)
+    const snapshot = materialSnapshot(group, item, Math.min(config.analysisWindow, config.bufferSize))
     const imagePlan = collectImagePlan(item.session, group.buffer, config.imageLimit)
     const images = await downloadImagePlan(imagePlan, config.imageMaxBytes)
     const startedAt = Date.now()
@@ -116,12 +116,13 @@ export function apply(ctx: Context, config: Config): void {
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
       speak = ensureDirectSpeak(item.reason, speak)
       if (speak.enabled === true) {
+        const focused = focusedMaterial(snapshot.entries, speak.target?.messageIds ?? [], 4, 12)
         const composed = await transport.post('/qqbot/group/compose', {
           apiVersion: 1,
           loopId: item.loopId,
           groupId: key,
-          material: snapshot.text,
-          participants: snapshot.participants,
+          material: focused.text,
+          participants: focused.participants,
           images: images.current,
           quotedImages: images.quoted,
           backgroundImages: images.background,
@@ -154,12 +155,13 @@ export function apply(ctx: Context, config: Config): void {
       for (const bubble of sendResult.bubbles ?? [reply]) appendBotMessage(group.buffer, key, item.loopId, bubble, selfId, config.bufferSize)
     }
 
+    const stateMaterial = focusedMaterial(snapshot.entries, speak.target?.messageIds ?? [], 3, 10)
     const stateResult = await transport.post('/qqbot/group/state-update', {
       apiVersion: 1,
       loopId: item.loopId,
       groupId: key,
-      material: snapshot.text,
-      participants: snapshot.participants,
+      material: stateMaterial.text || snapshot.text,
+      participants: stateMaterial.participants.length > 0 ? stateMaterial.participants : snapshot.participants,
       speak,
       sendResult,
     })
