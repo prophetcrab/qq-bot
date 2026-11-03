@@ -267,6 +267,32 @@ export function apply(ctx: Context, config: Config): void {
     if (name !== '' && group.name === '') group.name = name
   }
 
+  // Koishi's built-in help plugin claims /help and /帮助 before a normal
+  // middleware. Game commands must run first so /help shows the game registry.
+  ctx.middleware(async (session, next) => {
+    if (!config.enabled) return next()
+    if (session.userId === session.selfId || session.author?.isBot === true) return next()
+    if (config.groupOnly && session.isDirect === true) return next()
+    const key = String(session.guildId ?? session.channelId ?? '')
+    if (key === '') return next()
+    const access = (ctx as any).access
+    if (access !== null && access !== undefined) {
+      if (typeof access.isInboundAllowed === 'function' && !access.isInboundAllowed(session)) return next()
+      if (typeof access.isQuietBlocked === 'function' && access.isQuietBlocked(session)) return next()
+    }
+    const command = gameCommandOf(String(session.content ?? ''))
+    if (command === null) return next()
+    const nickname = String((session as any).author?.name ?? (session as any).username ?? session.userId ?? '')
+    const result = await transport.post('/qqbot/game/command', {
+      groupId: key,
+      userId: String(session.userId ?? ''),
+      nickname,
+      command,
+    })
+    if (result?.ok === true) await sendCommandReplies(session, result.replies)
+    else await session.send('指令服务暂时不可用，请稍后再试。')
+  }, true)
+
   ctx.middleware(async (session, next) => {
     if (!config.enabled) return next()
     if (session.userId === session.selfId || session.author?.isBot === true) return next()
@@ -274,19 +300,6 @@ export function apply(ctx: Context, config: Config): void {
     const key = String(session.guildId ?? session.channelId ?? '')
     if (key === '') return next()
     const content = String(session.content ?? '')
-    const gameCommand = gameCommandOf(content)
-    if (gameCommand !== null) {
-      const nickname = String((session as any).author?.name ?? (session as any).username ?? session.userId ?? '')
-      const result = await transport.post('/qqbot/game/command', {
-        groupId: key,
-        userId: String(session.userId ?? ''),
-        nickname,
-        command: gameCommand,
-      })
-      if (result?.ok === true) await sendCommandReplies(session, result.replies)
-      else await session.send('指令服务暂时不可用，请稍后再试。')
-      return
-    }
     if (content.startsWith('/')) return next()
 
     const group = stateOf(key)
