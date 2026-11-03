@@ -45,5 +45,5 @@ export const Config: Schema<Config> = Schema.object({
   stateFile: Schema.string().default('data/state/group-listener-status.json').description('监听诊断状态文件'),
   personaFile: Schema.string().default('data/config/persona.json').description('人设文件，读取兴趣关键词'),
   endpoint: Schema.string().default('').description('DSH 地址；留空读取 discoveryFile'),
-  requestTimeoutMs: Schema.number().default(45000).min(5000).max(120000).description('单次 DSH 请求超时'),
+  requestTimeoutMs: Schema.number().default(120000).min(5000).max(180000).description('单次 DSH 请求超时'),
 })

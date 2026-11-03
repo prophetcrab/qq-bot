@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const DEFAULT_TIMEOUT_MS = 45_000
+const DEFAULT_TIMEOUT_MS = 120_000
 
 /** HTTP client for the DSH group-loop endpoints, with discovery-file lookup. */
 export class DshTransport {
