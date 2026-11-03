@@ -33,7 +33,7 @@ test('envelope normalization and participant extraction keep one unique sender',
 
 test('group queue merges direct requests and keeps one normal request', async () => {
   const { createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, takeItem } = await import('../plugins/group-listener/queue.ts')
-  const group = createGroupState()
+  const group = createGroupState(5)
   enqueueNormal(group, 'm1', { guildId: 'g1' }, 'count')
   enqueueDirect(group, 'm2', { guildId: 'g1' }, 'mention')
   enqueueDirect(group, 'm3', { guildId: 'g1' }, 'reply')
@@ -51,7 +51,7 @@ test('group name resolver caches OneBot group names', async () => {
   const { GroupNameResolver } = await import('../plugins/group-listener/group-names.ts')
   const { createGroupState } = await import('../plugins/group-listener/queue.ts')
   const resolver = new GroupNameResolver()
-  const groups = new Map([['g1', createGroupState()]])
+  const groups = new Map([['g1', createGroupState(5)]])
   const bot = { internal: { getGroupList: async () => [{ group_id: 'g1', group_name: '测试群' }] } }
   assert.equal(await resolver.fill(groups, bot), true)
   const state = groups.get('g1')
@@ -60,3 +60,13 @@ test('group name resolver caches OneBot group names', async () => {
   assert.equal(await resolver.resolve(bot, 'g1'), '测试群')
 })
 
+
+test('count threshold is randomized inside the configured range', async () => {
+  const { randomCountThreshold } = await import('../plugins/group-listener/queue.ts')
+  assert.equal(randomCountThreshold(3, 10, () => 0), 3)
+  assert.equal(randomCountThreshold(3, 10, () => 0.999999), 10)
+  for (let i = 0; i < 100; i += 1) {
+    const value = randomCountThreshold(3, 10)
+    assert.ok(value >= 3 && value <= 10, `out of range: ${value}`)
+  }
+})

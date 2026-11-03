@@ -36,6 +36,7 @@ export interface GroupState {
   name: string
   buffer: Envelope[]
   unprocessed: number
+  countThreshold: number
   lastTriggerAt: number
   senders: Set<string>
   cooldownUntil: number

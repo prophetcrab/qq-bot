@@ -26,7 +26,8 @@ async function setup(t: TestContext) {
   app.plugin(groupListener as any, {
     discoveryFile,
     stateFile: join(dir, 'status.json'),
-    countTrigger: 100,
+    minCountTrigger: 100,
+    maxCountTrigger: 100,
     cooldownReplyMs: 1,
     cooldownNoReplyMs: 1,
   })

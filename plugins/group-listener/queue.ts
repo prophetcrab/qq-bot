@@ -1,11 +1,12 @@
 import { participantsOf, renderMaterial } from './envelope.ts'
 import type { Envelope, GroupState, Participant, QueueItem, QueuePriority, TriggerReason } from './types.ts'
 
-export function createGroupState(): GroupState {
+export function createGroupState(countThreshold: number): GroupState {
   return {
     name: '',
     buffer: [],
     unprocessed: 0,
+    countThreshold,
     lastTriggerAt: Date.now(),
     senders: new Set(),
     cooldownUntil: 0,
@@ -25,10 +26,18 @@ function queueItem(reason: TriggerReason, messageId: string, session: any, prior
   return { loopId: loopId(), reason, triggerMessageIds: [messageId], session, enqueuedAt: Date.now(), priority }
 }
 
-function resetCounters(group: GroupState): void {
+export function resetCounters(group: GroupState, countThreshold: number): void {
   group.unprocessed = 0
+  group.countThreshold = countThreshold
   group.lastTriggerAt = Date.now()
   group.senders.clear()
+}
+
+/** Pick a fresh 3-10 style threshold for the next counting cycle. */
+export function randomCountThreshold(min: number, max: number, random: () => number = Math.random): number {
+  const low = Math.min(min, max)
+  const high = Math.max(min, max)
+  return low + Math.floor(random() * (high - low + 1))
 }
 
 export function enqueueDirect(group: GroupState, messageId: string, session: any, reason: 'mention' | 'reply'): QueueItem {
@@ -39,7 +48,6 @@ export function enqueueDirect(group: GroupState, messageId: string, session: any
     group.queue.urgent = item
   }
   group.queue.normal = null
-  resetCounters(group)
   return item
 }
 
@@ -51,7 +59,6 @@ export function enqueueNormal(group: GroupState, messageId: string, session: any
   }
   const item = queueItem(reason, messageId, session, 'normal')
   group.queue.normal = item
-  resetCounters(group)
   return item
 }
 

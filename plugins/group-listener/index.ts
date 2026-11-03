@@ -6,7 +6,7 @@ import { Config } from './config.ts'
 import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
-import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, takeItem } from './queue.ts'
+import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
 import { appendBotMessage, sendReply } from './sender.ts'
 import { DshTransport } from './transport.ts'
 import type { GroupState, QueueItem } from './types.ts'
@@ -55,10 +55,12 @@ export function apply(ctx: Context, config: Config): void {
   const transport = new DshTransport({ endpoint: config.endpoint, discoveryFile: config.discoveryFile })
   const global = { get active() { return semaphore.active }, get waiting() { return semaphore.waiting } }
 
+  const nextThreshold = (): number => randomCountThreshold(config.minCountTrigger, config.maxCountTrigger)
+
   const stateOf = (key: string): GroupState => {
     let state = groups.get(key)
     if (state === undefined) {
-      state = createGroupState()
+      state = createGroupState(nextThreshold())
       groups.set(key, state)
     }
     return state
@@ -71,6 +73,7 @@ export function apply(ctx: Context, config: Config): void {
         name: group.name,
         bufferSize: group.buffer.length,
         unprocessed: group.unprocessed,
+        countThreshold: group.countThreshold,
         running: group.running,
         active: group.active,
         cooldownUntil: group.cooldownUntil,
@@ -228,10 +231,14 @@ export function apply(ctx: Context, config: Config): void {
     const replied = String((session.quote as any)?.user?.id ?? (session.quote as any)?.userId ?? '') === String(session.selfId)
     if (mentioned || replied) {
       enqueueDirect(group, envelope.id, session, mentioned ? 'mention' : 'reply')
+      resetCounters(group, nextThreshold())
       void wake(key)
-    } else if (group.unprocessed >= config.countTrigger) {
+    } else if (group.unprocessed >= group.countThreshold) {
       const queued = enqueueNormal(group, envelope.id, session, 'count')
-      if (queued !== null) void wake(key)
+      if (queued !== null) {
+        resetCounters(group, nextThreshold())
+        void wake(key)
+      }
     }
     persist()
     return next()
@@ -252,7 +259,10 @@ export function apply(ctx: Context, config: Config): void {
       const latest = group.buffer[group.buffer.length - 1]
       if (latest !== undefined && group.lastSession !== null) {
         const queued = enqueueNormal(group, latest.id, group.lastSession, 'time')
-        if (queued !== null) void wake(key)
+        if (queued !== null) {
+          resetCounters(group, nextThreshold())
+          void wake(key)
+        }
       }
     }
   }, TICK_MS)

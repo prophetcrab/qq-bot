@@ -47,7 +47,8 @@ plugins:
       batchWindowMs: 2500
       batchMaxWaitMs: 10000
     ./plugins/group-listener:gl01:
-      countTrigger: 5
+      minCountTrigger: 3
+      maxCountTrigger: 10
       timeTriggerMinutes: 30
       bufferSize: 100
       cooldownReplyMs: 25000
