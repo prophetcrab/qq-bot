@@ -101,3 +101,23 @@ test('image plan downloads a magic-byte checked image', async () => {
     globalThis.fetch = originalFetch
   }
 })
+
+test('watch requests are queued one per message and yield to direct triggers', async () => {
+  const { createGroupState, enqueueDirect, enqueueWatch, peekNext, takeItem } = await import('../plugins/group-listener/queue.ts')
+  const group = createGroupState(5)
+  group.watchUntil = Date.now() + 30000
+  enqueueWatch(group, 'm1', {}, 'watch')
+  enqueueWatch(group, 'm2', {}, 'watch')
+  assert.equal(group.queue.watch.length, 2)
+  const first = peekNext(group)
+  if (first === null) throw new Error('watch item missing')
+  assert.equal(first.triggerMessageIds[0], 'm1')
+  enqueueDirect(group, 'm3', {}, 'mention')
+  const direct = peekNext(group)
+  if (direct === null) throw new Error('direct item missing')
+  assert.equal(direct.priority, 'urgent')
+  takeItem(group, direct)
+  const next = peekNext(group)
+  if (next === null) throw new Error('second watch item missing')
+  assert.equal(next.triggerMessageIds[0], 'm1')
+})

@@ -10,9 +10,10 @@ export function createGroupState(countThreshold: number): GroupState {
     lastTriggerAt: Date.now(),
     senders: new Set(),
     cooldownUntil: 0,
+    watchUntil: 0,
     running: false,
     active: null,
-    queue: { urgent: null, normal: null },
+    queue: { urgent: null, watch: [], normal: null },
     lastLoop: null,
     lastSession: null,
   }
@@ -51,6 +52,13 @@ export function enqueueDirect(group: GroupState, messageId: string, session: any
   return item
 }
 
+export function enqueueWatch(group: GroupState, messageId: string, session: any, reason: 'watch'): QueueItem | null {
+  if (group.queue.watch.length >= 20) return null
+  const item = queueItem(reason, messageId, session, 'watch')
+  group.queue.watch.push(item)
+  return item
+}
+
 export function enqueueNormal(group: GroupState, messageId: string, session: any, reason: 'count' | 'time'): QueueItem | null {
   if (group.queue.urgent !== null) return null
   if (group.queue.normal !== null) {
@@ -63,11 +71,12 @@ export function enqueueNormal(group: GroupState, messageId: string, session: any
 }
 
 export function peekNext(group: GroupState): QueueItem | null {
-  return group.queue.urgent ?? group.queue.normal
+  return group.queue.urgent ?? group.queue.watch[0] ?? group.queue.normal
 }
 
 export function takeItem(group: GroupState, item: QueueItem): void {
   if (group.queue.urgent === item) group.queue.urgent = null
+  else if (group.queue.watch[0] === item) group.queue.watch.shift()
   else if (group.queue.normal === item) group.queue.normal = null
 }
 
@@ -91,6 +100,6 @@ export function materialSnapshot(group: GroupState, item: QueueItem, limit: numb
   return { text: renderMaterial(entries), participants: participantsOf(entries), count: entries.length }
 }
 
-export function queueView(group: GroupState): { urgent: string | null; normal: string | null } {
-  return { urgent: group.queue.urgent?.reason ?? null, normal: group.queue.normal?.reason ?? null }
+export function queueView(group: GroupState): { urgent: string | null; watch: number; normal: string | null } {
+  return { urgent: group.queue.urgent?.reason ?? null, watch: group.queue.watch.length, normal: group.queue.normal?.reason ?? null }
 }

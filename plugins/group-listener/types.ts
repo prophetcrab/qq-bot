@@ -1,7 +1,7 @@
 /** Shared wire and in-memory types for the group listener. */
 
-export type TriggerReason = 'mention' | 'reply' | 'count' | 'time'
-export type QueuePriority = 'urgent' | 'normal'
+export type TriggerReason = 'mention' | 'reply' | 'count' | 'time' | 'watch'
+export type QueuePriority = 'urgent' | 'watch' | 'normal'
 
 export interface Sender {
   qq: string
@@ -40,9 +40,10 @@ export interface GroupState {
   lastTriggerAt: number
   senders: Set<string>
   cooldownUntil: number
+  watchUntil: number
   running: boolean
   active: string | null
-  queue: { urgent: QueueItem | null; normal: QueueItem | null }
+  queue: { urgent: QueueItem | null; watch: QueueItem[]; normal: QueueItem | null }
   lastLoop: any
   lastSession: any
 }
