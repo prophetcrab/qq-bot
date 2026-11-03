@@ -6,6 +6,7 @@ import { Config } from './config.ts'
 import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
+import { collectImagePlan, downloadImagePlan } from './images.ts'
 import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
 import { appendBotMessage, sendReply } from './sender.ts'
 import { DshTransport } from './transport.ts'
@@ -94,6 +95,8 @@ export function apply(ctx: Context, config: Config): void {
     const group = stateOf(key)
     group.active = item.loopId
     const snapshot = materialSnapshot(group, item, config.bufferSize)
+    const imagePlan = collectImagePlan(item.session, group.buffer, config.imageLimit)
+    const images = await downloadImagePlan(imagePlan, config.imageMaxBytes)
     const startedAt = Date.now()
     let speak: any = { enabled: false }
     let reply = ''
@@ -106,6 +109,9 @@ export function apply(ctx: Context, config: Config): void {
         trigger: { reason: item.reason, messageId: item.triggerMessageIds[item.triggerMessageIds.length - 1] },
         material: snapshot.text,
         participants: snapshot.participants,
+        images: images.current,
+        quotedImages: images.quoted,
+        backgroundImages: images.background,
       })
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
       speak = ensureDirectSpeak(item.reason, speak)
@@ -116,6 +122,9 @@ export function apply(ctx: Context, config: Config): void {
           groupId: key,
           material: snapshot.text,
           participants: snapshot.participants,
+          images: images.current,
+          quotedImages: images.quoted,
+          backgroundImages: images.background,
           speak,
         })
         if (composed?.ok === true) {
@@ -161,6 +170,7 @@ export function apply(ctx: Context, config: Config): void {
       groupId: key,
       trigger: item.reason,
       materialCount: snapshot.count,
+      imageCount: images.current.length + images.quoted.length + images.background.length,
       speak,
       reply,
       sendResult,

@@ -70,3 +70,34 @@ test('count threshold is randomized inside the configured range', async () => {
     assert.ok(value >= 3 && value <= 10, `out of range: ${value}`)
   }
 })
+
+test('image plan covers current, quote and recent background images', async () => {
+  const { collectImagePlan } = await import('../plugins/group-listener/images.ts')
+  const session = {
+    elements: [{ type: 'image', attrs: { src: 'https://93.184.216.34/current.png' } }],
+    quote: { elements: [{ type: 'image', attrs: { src: 'https://93.184.216.34/quote.png' } }] },
+  }
+  const buffer: any[] = [{
+    id: 'm1', groupId: 'g1', sender: { qq: '20000', nickname: '小明' }, sentAt: { iso: '', unix: 0 }, receivedAt: '',
+    content: { text: '', quote: null, forward: null, attachments: [{ type: 'image', summary: '图片', url: 'https://93.184.216.34/background.png' }] },
+  }]
+  const plan = collectImagePlan(session, buffer, 4)
+  assert.deepEqual(plan.current, ['https://93.184.216.34/current.png'])
+  assert.deepEqual(plan.quoted, ['https://93.184.216.34/quote.png'])
+  assert.deepEqual(plan.background, ['https://93.184.216.34/background.png'])
+})
+
+test('image plan downloads a magic-byte checked image', async () => {
+  const { downloadImagePlan } = await import('../plugins/group-listener/images.ts')
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x00])
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async () => new Response(png, { status: 200, headers: { 'content-type': 'image/png', 'content-length': String(png.length) } })) as typeof fetch
+  try {
+    const result = await downloadImagePlan({ current: ['https://93.184.216.34/pic.png'], quoted: [], background: [] }, 1024 * 1024)
+    assert.equal(result.current.length, 1)
+    assert.equal(result.current[0].mediaType, 'image/png')
+    assert.ok(result.current[0].data.length > 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})

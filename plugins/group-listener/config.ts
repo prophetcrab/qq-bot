@@ -11,6 +11,8 @@ export interface Config {
   cooldownNoReplyMs: number
   bubbleDelayMinMs: number
   bubbleDelayMaxMs: number
+  imageLimit: number
+  imageMaxBytes: number
   maxConcurrentGroups: number
   discoveryFile: string
   stateFile: string
@@ -28,6 +30,8 @@ export const Config: Schema<Config> = Schema.object({
   cooldownNoReplyMs: Schema.number().default(7000).min(0).max(300000).description('不发言后的群冷却'),
   bubbleDelayMinMs: Schema.number().default(300).min(0).max(5000).description('气泡最短间隔'),
   bubbleDelayMaxMs: Schema.number().default(1200).min(0).max(10000).description('气泡最长间隔'),
+  imageLimit: Schema.number().default(4).min(0).max(4).description('每轮最多附带图片数'),
+  imageMaxBytes: Schema.number().default(4 * 1024 * 1024).min(1024 * 1024).max(10 * 1024 * 1024).description('单张图片最大字节数'),
   maxConcurrentGroups: Schema.number().default(3).min(1).max(20).description('群间并发的最大群数'),
   discoveryFile: Schema.string().default('data/state/ai.json').description('DSH AI 发现文件'),
   stateFile: Schema.string().default('data/state/group-listener-status.json').description('监听诊断状态文件'),

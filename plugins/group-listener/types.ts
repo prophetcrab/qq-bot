@@ -18,7 +18,7 @@ export interface Envelope {
     text: string
     quote: unknown
     forward: unknown
-    attachments: Array<{ type: string; summary: string }>
+    attachments: Array<{ type: string; summary: string; url?: string }>
   }
   fromSelf?: boolean
 }

@@ -29,7 +29,7 @@ function senderOf(source: any): Sender {
 function contentOf(source: any): Envelope['content'] {
   const raw = object(source)
   const elements = Array.isArray(raw.elements) ? raw.elements : Array.isArray(raw.message) ? raw.message : []
-  const attachments: Array<{ type: string; summary: string }> = []
+  const attachments: Array<{ type: string; summary: string; url?: string }> = []
   let text = ''
   for (const item of elements) {
     const element = object(item)
@@ -39,7 +39,8 @@ function contentOf(source: any): Envelope['content'] {
     else if (type === 'at') text += string(attrs.id) === 'all' ? '@全体成员' : `@${string(attrs.name) || string(attrs.id) || '某人'}`
     else if (['image', 'img', 'face', 'record', 'video', 'file'].includes(type)) {
       const summary = type === 'image' || type === 'img' ? '图片' : type === 'face' ? '表情' : type === 'record' ? '语音' : type === 'video' ? '视频' : '文件'
-      attachments.push({ type, summary })
+      const url = type === 'image' || type === 'img' ? string(attrs.src ?? attrs.url ?? attrs.file) : ''
+      attachments.push({ type, summary, ...(url.startsWith('http://') || url.startsWith('https://') ? { url } : {}) })
     }
   }
   if (text === '') text = string(raw.text) || string(raw.content)
