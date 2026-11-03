@@ -30,7 +30,6 @@ async function setup(t: TestContext) {
     maxCountTrigger: 100,
     cooldownReplyMs: 1,
     cooldownNoReplyMs: 1,
-    watchWindowMs: 5000,
     firstBubbleDelayMinMs: 0,
     firstBubbleDelayMaxMs: 0,
     bubbleDelayMinMs: 0,
@@ -56,11 +55,4 @@ test('a mention wakes the queue worker and sends a reply', async (t) => {
   assert.equal(status.loops.length, 1)
   assert.equal(status.loops[0].sendResult.sent, true)
   assert.equal(status.loops[0].sendResult.parts, 2)
-  assert.ok(status.groups.g1.watchUntil > Date.now() - 1000)
-
-  await app.mock.client('20000', 'g1').receive('那再补一句')
-  await new Promise((resolve) => setTimeout(resolve, 150))
-  const after = JSON.parse(readFileSync(stateFile, 'utf8'))
-  assert.ok(after.loops.length >= 2, 'a message inside the watch window must trigger another analysis')
-  assert.ok(after.loops.some((loop: any) => loop.trigger === 'watch'))
 })

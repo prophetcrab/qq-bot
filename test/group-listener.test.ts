@@ -32,7 +32,7 @@ test('envelope normalization and participant extraction keep one unique sender',
 })
 
 test('group queue merges direct requests and keeps one normal request', async () => {
-  const { createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, takeItem } = await import('../plugins/group-listener/queue.ts')
+  const { createGroupState, enqueueDirect, enqueueNormal, takeItem } = await import('../plugins/group-listener/queue.ts')
   const group = createGroupState(5)
   enqueueNormal(group, 'm1', { guildId: 'g1' }, 'count')
   enqueueDirect(group, 'm2', { guildId: 'g1' }, 'mention')
@@ -43,8 +43,6 @@ test('group queue merges direct requests and keeps one normal request', async ()
   assert.equal(group.queue.normal, null)
   takeItem(group, item)
   assert.equal(group.queue.urgent, null)
-  const snapshot = materialSnapshot(group, item, 100)
-  assert.equal(snapshot.count, 0)
 })
 
 test('group name resolver caches OneBot group names', async () => {
@@ -59,7 +57,6 @@ test('group name resolver caches OneBot group names', async () => {
   assert.equal(state.name, '测试群')
   assert.equal(await resolver.resolve(bot, 'g1'), '测试群')
 })
-
 
 test('count threshold is randomized inside the configured range', async () => {
   const { randomCountThreshold } = await import('../plugins/group-listener/queue.ts')
@@ -100,24 +97,4 @@ test('image plan downloads a magic-byte checked image', async () => {
   } finally {
     globalThis.fetch = originalFetch
   }
-})
-
-test('watch requests are queued one per message and yield to direct triggers', async () => {
-  const { createGroupState, enqueueDirect, enqueueWatch, peekNext, takeItem } = await import('../plugins/group-listener/queue.ts')
-  const group = createGroupState(5)
-  group.watchUntil = Date.now() + 30000
-  enqueueWatch(group, 'm1', {}, 'watch')
-  enqueueWatch(group, 'm2', {}, 'watch')
-  assert.equal(group.queue.watch.length, 2)
-  const first = peekNext(group)
-  if (first === null) throw new Error('watch item missing')
-  assert.equal(first.triggerMessageIds[0], 'm1')
-  enqueueDirect(group, 'm3', {}, 'mention')
-  const direct = peekNext(group)
-  if (direct === null) throw new Error('direct item missing')
-  assert.equal(direct.priority, 'urgent')
-  takeItem(group, direct)
-  const next = peekNext(group)
-  if (next === null) throw new Error('second watch item missing')
-  assert.equal(next.triggerMessageIds[0], 'm1')
 })

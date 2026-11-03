@@ -53,7 +53,6 @@ plugins:
       bufferSize: 100
       cooldownReplyMs: 25000
       cooldownNoReplyMs: 7000
-      watchWindowMs: 30000
       firstBubbleDelayMinMs: 1200
       firstBubbleDelayMaxMs: 3000
       bubbleDelayMinMs: 800

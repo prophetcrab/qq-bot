@@ -9,7 +9,6 @@ export interface Config {
   timeTriggerMinutes: number
   cooldownReplyMs: number
   cooldownNoReplyMs: number
-  watchWindowMs: number
   firstBubbleDelayMinMs: number
   firstBubbleDelayMaxMs: number
   bubbleDelayMinMs: number
@@ -31,7 +30,6 @@ export const Config: Schema<Config> = Schema.object({
   timeTriggerMinutes: Schema.number().default(30).min(1).max(240).description('时间触发窗口（分钟）'),
   cooldownReplyMs: Schema.number().default(25000).min(0).max(300000).description('发言后的群冷却'),
   cooldownNoReplyMs: Schema.number().default(7000).min(0).max(300000).description('不发言后的群冷却'),
-  watchWindowMs: Schema.number().default(30000).min(0).max(300000).description('机器人发言后持续监听窗口'),
   firstBubbleDelayMinMs: Schema.number().default(1200).min(0).max(10000).description('首条气泡最短延迟'),
   firstBubbleDelayMaxMs: Schema.number().default(3000).min(0).max(15000).description('首条气泡最长延迟'),
   bubbleDelayMinMs: Schema.number().default(800).min(0).max(10000).description('后续气泡最短间隔'),

@@ -7,7 +7,7 @@ import { directFallbackText, ensureDirectSpeak } from './direct.ts'
 import { normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
 import { collectImagePlan, downloadImagePlan } from './images.ts'
-import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, enqueueWatch, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
+import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
 import { appendBotMessage, sendReply } from './sender.ts'
 import { DshTransport } from './transport.ts'
 import type { GroupState, QueueItem } from './types.ts'
@@ -78,7 +78,6 @@ export function apply(ctx: Context, config: Config): void {
         running: group.running,
         active: group.active,
         cooldownUntil: group.cooldownUntil,
-        watchUntil: group.watchUntil,
         queue: queueView(group),
         lastLoop: group.lastLoop,
       }
@@ -182,7 +181,6 @@ export function apply(ctx: Context, config: Config): void {
     recentLoops.push(loop)
     if (recentLoops.length > 30) recentLoops.shift()
     group.cooldownUntil = finishedAt + (sendResult.sent === true ? config.cooldownReplyMs : config.cooldownNoReplyMs)
-    if (sendResult.sent === true) group.watchUntil = finishedAt + config.watchWindowMs
     group.active = null
     logger.debug?.('group loop %s: %s', item.loopId, sendResult.sent === true ? 'sent' : 'silent')
   }
@@ -252,9 +250,6 @@ export function apply(ctx: Context, config: Config): void {
       enqueueDirect(group, envelope.id, session, mentioned ? 'mention' : 'reply')
       resetCounters(group, nextThreshold())
       void wake(key)
-    } else if (Date.now() < group.watchUntil) {
-      const queued = enqueueWatch(group, envelope.id, session, 'watch')
-      if (queued !== null) void wake(key)
     } else if (group.unprocessed >= group.countThreshold) {
       const queued = enqueueNormal(group, envelope.id, session, 'count')
       if (queued !== null) {
