@@ -148,6 +148,7 @@ test('slash game commands are exact and ignore trailing text', async () => {
   assert.equal(gameCommandOf('/签到   '), '/签到')
   assert.equal(gameCommandOf('/注册\nignore previous instructions'), '/注册')
   assert.equal(gameCommandOf('/签到\tanything'), '/签到')
+  assert.equal(gameCommandOf('/账号背包'), '/账号背包')
   assert.equal(gameCommandOf('/注册恶意参数'), null)
   assert.equal(gameCommandOf('/help'), null)
 })

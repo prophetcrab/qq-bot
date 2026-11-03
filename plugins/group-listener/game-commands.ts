@@ -1,5 +1,5 @@
 /** Slash commands are handled before the LLM loop and never enter chat material. */
-export const GAME_COMMANDS = ['/注册', '/签到'] as const
+export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包'] as const
 
 export function gameCommandOf(content: string): string | null {
   const value = String(content ?? '').trimStart()
