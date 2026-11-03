@@ -113,3 +113,16 @@ test('focused material keeps the target window instead of the full analysis buff
   assert.ok(!ids.includes('m0'))
   assert.ok(focused.count <= 5)
 })
+
+test('focus text names the current sender and target messages explicitly', async () => {
+  const { focusText } = await import('../plugins/group-listener/envelope.ts')
+  const entries = [
+    { id: 'm1', groupId: 'g1', sender: { qq: '20000', nickname: '小明' }, sentAt: { iso: '', unix: 1 }, receivedAt: '', content: { text: '第一句', quote: null, forward: null, attachments: [] } },
+    { id: 'm2', groupId: 'g1', sender: { qq: '20001', nickname: '小红' }, sentAt: { iso: '', unix: 2 }, receivedAt: '', content: { text: '第二句', quote: null, forward: null, attachments: [] } },
+  ]
+  const focus = focusText(entries, 'm2', ['m1'])
+  assert.match(focus, /【当前触发消息】.*小红/u)
+  assert.match(focus, /【回复目标消息】[\s\S]*小明/u)
+  assert.match(focus, /第二句/u)
+  assert.match(focus, /第一句/u)
+})

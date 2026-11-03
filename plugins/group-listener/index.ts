@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { Config } from './config.ts'
 import { directFallbackText, ensureDirectSpeak } from './direct.ts'
-import { normalizeEnvelope } from './envelope.ts'
+import { focusText, normalizeEnvelope } from './envelope.ts'
 import { GroupNameResolver } from './group-names.ts'
 import { collectImagePlan, downloadImagePlan } from './images.ts'
 import { appendEnvelope, createGroupState, enqueueDirect, enqueueNormal, focusedMaterial, materialSnapshot, peekNext, queueView, randomCountThreshold, resetCounters, takeItem } from './queue.ts'
@@ -97,6 +97,8 @@ export function apply(ctx: Context, config: Config): void {
     const snapshot = materialSnapshot(group, item, Math.min(config.analysisWindow, config.bufferSize))
     const imagePlan = collectImagePlan(item.session, group.buffer, config.imageLimit)
     const images = await downloadImagePlan(imagePlan, config.imageMaxBytes)
+    const triggerId = item.triggerMessageIds[item.triggerMessageIds.length - 1]
+    const analyzeMaterial = [focusText(snapshot.entries, triggerId), snapshot.text].filter(Boolean).join('\n\n')
     const startedAt = Date.now()
     let speak: any = { enabled: false }
     let reply = ''
@@ -107,7 +109,7 @@ export function apply(ctx: Context, config: Config): void {
         loopId: item.loopId,
         groupId: key,
         trigger: { reason: item.reason, messageId: item.triggerMessageIds[item.triggerMessageIds.length - 1] },
-        material: snapshot.text,
+        material: analyzeMaterial,
         participants: snapshot.participants,
         images: images.current,
         quotedImages: images.quoted,
@@ -116,12 +118,14 @@ export function apply(ctx: Context, config: Config): void {
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
       speak = ensureDirectSpeak(item.reason, speak)
       if (speak.enabled === true) {
-        const focused = focusedMaterial(snapshot.entries, speak.target?.messageIds ?? [], 4, 12)
+        const targetIds = speak.target?.messageIds ?? []
+        const focused = focusedMaterial(snapshot.entries, targetIds, 4, 12)
+        const composeMaterial = [focusText(snapshot.entries, triggerId, targetIds), focused.text].filter(Boolean).join('\n\n')
         const composed = await transport.post('/qqbot/group/compose', {
           apiVersion: 1,
           loopId: item.loopId,
           groupId: key,
-          material: focused.text,
+          material: composeMaterial,
           participants: focused.participants,
           images: images.current,
           quotedImages: images.quoted,

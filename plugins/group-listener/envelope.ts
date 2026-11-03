@@ -99,3 +99,13 @@ export function renderEnvelope(envelope: Envelope): string {
 export function renderMaterial(entries: Envelope[]): string {
   return entries.map(renderEnvelope).join('\n')
 }
+
+export function focusText(entries: Envelope[], currentId: string, targetIds: string[] = []): string {
+  const byId = new Map(entries.map((entry) => [entry.id, entry]))
+  const current = byId.get(currentId)
+  const targets = [...new Set(targetIds)].map((id) => byId.get(id)).filter((entry): entry is Envelope => entry !== undefined)
+  const lines: string[] = []
+  if (current !== undefined) lines.push(`【当前触发消息】${renderEnvelope(current)}`)
+  if (targets.length > 0) lines.push(`【回复目标消息】\n${targets.map(renderEnvelope).join('\n')}`)
+  return lines.join('\n\n')
+}
