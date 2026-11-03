@@ -123,7 +123,11 @@ export function apply(ctx: Context, config: Config): void {
       })
       if (analysis?.ok === true) speak = analysis.speak ?? { enabled: false }
       speak = ensureDirectSpeak(item.reason, speak)
-      if (speak.enabled === true) {
+      if (speak.enabled === true && speak.replyType === 'action') {
+        group.phase = 'send'
+        persist()
+        sendResult = await sendReply(item, speak, [], { firstMinDelayMs: config.firstBubbleDelayMinMs, firstMaxDelayMs: config.firstBubbleDelayMaxMs, minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
+      } else if (speak.enabled === true) {
         group.phase = 'compose'
         persist()
         const targetIds = speak.target?.messageIds ?? []

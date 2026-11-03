@@ -46,8 +46,15 @@ export async function sendReply(item: QueueItem, speak: any, input: string | str
   if (speak.replyType === 'action') {
     try {
       const internal = session.bot?.internal
-      if (typeof internal?.call !== 'function') throw new Error('send_poke unavailable')
-      await internal.call('send_poke', { group_id: Number(groupId), user_id: Number(speak.target?.userIds?.[0]) })
+      const group = Number(groupId)
+      const user = Number(speak.target?.userIds?.[0])
+      if (!Number.isInteger(group) || group <= 0) throw new Error('invalid group id')
+      if (!Number.isInteger(user) || user <= 0) throw new Error('invalid target user id')
+      if (typeof internal?._request !== 'function') throw new Error('send_poke unavailable')
+      const response = await internal._request('send_poke', { group_id: group, user_id: user })
+      if (response !== null && typeof response === 'object' && response.retcode !== undefined && Number(response.retcode) !== 0) {
+        throw new Error(String(response.wording ?? response.message ?? `send_poke retcode ${response.retcode}`))
+      }
       return { sent: true, parts: 0, messageIds: [], replyType: 'action' }
     } catch (error: any) {
       return { sent: false, parts: 0, messageIds: [], replyType: 'action', error: String(error?.message ?? error) }
