@@ -103,6 +103,7 @@ export function apply(ctx: Context, config: Config): void {
     const analyzeMaterial = [focusText(snapshot.entries, triggerId), snapshot.text].filter(Boolean).join('\n\n')
     const startedAt = Date.now()
     let speak: any = { enabled: false }
+    let toolCalls: any[] = []
     let reply = ''
     let sendResult: any = { sent: false, reason: 'no_speak' }
     try {
@@ -135,6 +136,7 @@ export function apply(ctx: Context, config: Config): void {
           speak,
         })
         if (composed?.ok === true) {
+          toolCalls = Array.isArray(composed.toolCalls) ? composed.toolCalls.slice(0, 2) : []
           const planned = Array.isArray(composed.parts) && composed.parts.length > 0 ? composed.parts : [composed.text]
           const cleaned = planned.map((part: unknown) => typeof part === 'string' ? part.trim() : '').filter(Boolean).slice(0, 3)
           if (cleaned.length === 0) {
@@ -179,6 +181,7 @@ export function apply(ctx: Context, config: Config): void {
       trigger: item.reason,
       materialCount: snapshot.count,
       imageCount: images.current.length + images.quoted.length + images.background.length,
+      toolCalls,
       speak,
       reply,
       sendResult,
