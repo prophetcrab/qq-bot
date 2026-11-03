@@ -77,7 +77,7 @@ export function participantsOf(entries: Envelope[]): Participant[] {
 }
 
 export function renderEnvelope(envelope: Envelope): string {
-  const lines = [`[${formatLocal(envelope.sentAt.unix)}] ${envelope.sender.nickname}(${envelope.sender.qq})：${envelope.content.text || ''}`]
+  const lines = [`[${formatLocal(envelope.sentAt.unix)}] ${envelope.sender.nickname}(${envelope.sender.qq}) [id:${envelope.id}]：${envelope.content.text || ''}`]
   for (const attachment of envelope.content.attachments) lines.push(`  [${attachment.summary}]`)
   const quote = object(envelope.content.quote)
   if (quote.sender) lines.push(`  ↳ 引用 ${quote.sender.nickname ?? quote.sender.qq}(${quote.sender.qq ?? ''})：${string(quote.content?.text)}`)

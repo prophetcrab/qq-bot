@@ -74,9 +74,10 @@ export async function sendReply(item: QueueItem, speak: any, input: string | str
       ? bubbleDelay(parts[index], timing.firstMinDelayMs, timing.firstMaxDelayMs)
       : bubbleDelay(parts[index], timing.minDelayMs, timing.maxDelayMs))
     let content: any = parts[index]
-    if (index === 0 && speak.replyType === 'quote' && speak.target?.messageIds?.[0]) {
-      content = h('quote', { id: speak.target.messageIds[0] }) + content
-    }
+    const quoteId = index === 0
+      ? (speak.quote?.messageIds?.[0] ?? (speak.replyType === 'quote' ? speak.target?.messageIds?.[0] : ''))
+      : ''
+    if (quoteId) content = h('quote', { id: quoteId }) + content
     if (index === 0 && speak.replyType === 'at' && speak.target?.userIds?.[0]) {
       content = h('at', { id: speak.target.userIds[0] }) + content
     }

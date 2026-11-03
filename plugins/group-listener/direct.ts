@@ -20,6 +20,8 @@ export function ensureDirectSpeak(reason: TriggerReason, speak: any, target: Dir
   const replyType = reason === 'reply'
     ? (messageId !== '' ? 'quote' : 'normal')
     : (userId !== '' ? 'at' : messageId !== '' ? 'quote' : 'normal')
+  const focus = speak?.focus !== null && typeof speak?.focus === 'object' ? speak.focus : null
+  const quote = speak?.quote !== null && typeof speak?.quote === 'object' ? speak.quote : null
   return {
     enabled: true,
     kind: 'reply',
@@ -28,6 +30,8 @@ export function ensureDirectSpeak(reason: TriggerReason, speak: any, target: Dir
       messageIds: messageId !== '' ? [messageId] : [],
       userIds: userId !== '' ? [userId] : [],
     },
+    ...(focus !== null ? { focus } : {}),
+    ...(quote !== null ? { quote } : {}),
   }
 }
 

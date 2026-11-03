@@ -131,9 +131,17 @@ export function apply(ctx: Context, config: Config): void {
       } else if (speak.enabled === true) {
         group.phase = 'compose'
         persist()
-        const targetIds = speak.target?.messageIds ?? []
-        const focused = focusedMaterial(snapshot.entries, targetIds, 4, 12)
-        const composeMaterial = [focusText(snapshot.entries, triggerId, targetIds), focused.text].filter(Boolean).join('\n\n')
+        const visible = new Set(snapshot.entries.map((entry) => entry.id))
+        const targetIds = Array.isArray(speak.target?.messageIds) ? speak.target.messageIds : []
+        const rawFocus = Array.isArray(speak.focus?.messageIds) ? speak.focus.messageIds : []
+        const focusIds = rawFocus.filter((id: string) => visible.has(id)).slice(0, 4)
+        const contextIds = focusIds.length > 0 ? focusIds : targetIds
+        if (Array.isArray(speak.quote?.messageIds)) {
+          speak.quote.messageIds = speak.quote.messageIds.filter((id: string) => visible.has(id)).slice(0, 1)
+          if (speak.quote.messageIds.length === 0) delete speak.quote
+        }
+        const focused = focusedMaterial(snapshot.entries, contextIds, 4, 12)
+        const composeMaterial = [focusText(snapshot.entries, triggerId, contextIds), focused.text].filter(Boolean).join('\n\n')
         const composed = await transport.post('/qqbot/group/compose', {
           apiVersion: 1,
           loopId: item.loopId,

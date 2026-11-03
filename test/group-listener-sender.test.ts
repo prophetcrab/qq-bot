@@ -26,3 +26,14 @@ test('action reports a failed poke without falling back to text', async () => {
   assert.equal(result.sent, false)
   assert.match(result.error ?? '', /not found/u)
 })
+
+
+test('at delivery can quote an earlier focus message', async () => {
+  const sent: any[] = []
+  const session: any = { guildId: 'g1', send: async (content: any) => { sent.push(content) }, bot: { internal: { _request: async () => ({ retcode: 0 }) } } }
+  const result = await sendReply({ loopId: 'l1', session } as any, {
+    replyType: 'at', target: { messageIds: ['m1'], userIds: ['20000'] }, quote: { messageIds: ['m0'], userIds: [] },
+  }, ['你好'], timing)
+  assert.equal(result.sent, true)
+  assert.match(sent[0], /<at id="20000"\/><quote id="m0"\/>你好/u)
+})
