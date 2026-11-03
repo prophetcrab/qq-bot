@@ -118,14 +118,21 @@ export function apply(ctx: Context, config: Config): void {
           participants: snapshot.participants,
           speak,
         })
-        if (composed?.ok === true && typeof composed.text === 'string') {
-          reply = composed.text.trim()
-          if (reply === '') reply = directFallbackText(item.reason)
-          if (speak.replyType === 'action' || reply !== '') sendResult = await sendReply(item, speak, reply)
+        if (composed?.ok === true) {
+          const planned = Array.isArray(composed.parts) && composed.parts.length > 0 ? composed.parts : [composed.text]
+          const cleaned = planned.map((part: unknown) => typeof part === 'string' ? part.trim() : '').filter(Boolean).slice(0, 3)
+          if (cleaned.length === 0) {
+            const fallback = directFallbackText(item.reason)
+            if (fallback !== '') cleaned.push(fallback)
+          }
+          reply = cleaned.join('\n')
+          if (speak.replyType === 'action' || cleaned.length > 0) {
+            sendResult = await sendReply(item, speak, cleaned, { minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
+          }
         } else {
           reply = directFallbackText(item.reason)
           sendResult = reply !== ''
-            ? await sendReply(item, speak, reply)
+            ? await sendReply(item, speak, [reply], { minDelayMs: config.bubbleDelayMinMs, maxDelayMs: config.bubbleDelayMaxMs })
             : { sent: false, reason: 'compose_failed', error: composed?.error }
         }
       }
@@ -135,7 +142,7 @@ export function apply(ctx: Context, config: Config): void {
 
     if (sendResult.sent === true) {
       const selfId = String(item.session?.selfId ?? (ctx as any).bots?.[0]?.selfId ?? '')
-      appendBotMessage(group.buffer, key, item.loopId, reply, selfId, config.bufferSize)
+      for (const bubble of sendResult.bubbles ?? [reply]) appendBotMessage(group.buffer, key, item.loopId, bubble, selfId, config.bufferSize)
     }
 
     const stateResult = await transport.post('/qqbot/group/state-update', {

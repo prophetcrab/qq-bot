@@ -18,7 +18,7 @@ async function setup(t: TestContext) {
     const target = String(url)
     calls.push(target)
     if (target.endsWith('/analyze')) return { ok: true, status: 200, json: async () => ({ ok: true, speak: { enabled: false } }) } as any
-    if (target.endsWith('/compose')) return { ok: true, status: 200, json: async () => ({ ok: true, text: '收到，我在。' }) } as any
+    if (target.endsWith('/compose')) return { ok: true, status: 200, json: async () => ({ ok: true, text: '收到我在。', parts: ['收到', '我在。'] }) } as any
     return { ok: true, status: 200, json: async () => ({ ok: true }) } as any
   }) as typeof fetch
   const app = new App({ prefix: ['/'] })
@@ -30,6 +30,8 @@ async function setup(t: TestContext) {
     maxCountTrigger: 100,
     cooldownReplyMs: 1,
     cooldownNoReplyMs: 1,
+    bubbleDelayMinMs: 0,
+    bubbleDelayMaxMs: 0,
   })
   await app.start()
   t.after(async () => {
@@ -50,4 +52,5 @@ test('a mention wakes the queue worker and sends a reply', async (t) => {
   const status = JSON.parse(readFileSync(stateFile, 'utf8'))
   assert.equal(status.loops.length, 1)
   assert.equal(status.loops[0].sendResult.sent, true)
+  assert.equal(status.loops[0].sendResult.parts, 2)
 })

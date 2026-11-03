@@ -6,10 +6,30 @@ export interface SendResult {
   parts: number
   messageIds: string[]
   replyType?: string
+  failedParts?: number
+  bubbles?: string[]
   error?: string
 }
 
-export async function sendReply(item: QueueItem, speak: any, text: string): Promise<SendResult> {
+export interface SendTiming {
+  minDelayMs: number
+  maxDelayMs: number
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+function bubbleDelay(text: string, timing: SendTiming): number {
+  const natural = timing.minDelayMs + text.length * 15
+  return Math.min(timing.maxDelayMs, Math.max(timing.minDelayMs, natural))
+}
+
+function normalizeParts(input: string | string[]): string[] {
+  const list = Array.isArray(input) ? input : [input]
+  return list.map((part) => String(part).trim()).filter(Boolean).slice(0, 3)
+}
+
+/** Send a planned batch of 1-3 short bubbles with human-paced gaps. */
+export async function sendReply(item: QueueItem, speak: any, input: string | string[], timing: SendTiming): Promise<SendResult> {
   const session = item.session
   const groupId = String(session.guildId ?? session.channelId ?? '')
 
@@ -24,25 +44,38 @@ export async function sendReply(item: QueueItem, speak: any, text: string): Prom
     }
   }
 
-  let content: any = text
-  if (speak.replyType === 'quote' && speak.target?.messageIds?.[0]) {
-    content = h('quote', { id: speak.target.messageIds[0] }) + text
-  }
-  if (speak.replyType === 'at' && speak.target?.userIds?.[0]) {
-    content = h('at', { id: speak.target.userIds[0] }) + text
-  }
+  const parts = normalizeParts(input)
+  if (parts.length === 0) return { sent: false, parts: 0, messageIds: [], replyType: speak.replyType, error: 'empty reply' }
 
-  try {
-    const sent = await session.send(content)
-    const parts = Array.isArray(sent) ? sent.length : 1
-    return {
-      sent: true,
-      parts,
-      messageIds: Array.from({ length: parts }, (_, index) => `${item.loopId}_${index}`),
-      replyType: speak.replyType,
+  const messageIds: string[] = []
+  const bubbles: string[] = []
+  let failedParts = 0
+  let lastError = ''
+  for (let index = 0; index < parts.length; index += 1) {
+    await sleep(bubbleDelay(parts[index], timing))
+    let content: any = parts[index]
+    if (index === 0 && speak.replyType === 'quote' && speak.target?.messageIds?.[0]) {
+      content = h('quote', { id: speak.target.messageIds[0] }) + content
     }
-  } catch (error: any) {
-    return { sent: false, parts: 0, messageIds: [], replyType: speak.replyType, error: String(error?.message ?? error) }
+    if (index === 0 && speak.replyType === 'at' && speak.target?.userIds?.[0]) {
+      content = h('at', { id: speak.target.userIds[0] }) + content
+    }
+    try {
+      await session.send(content)
+      messageIds.push(`${item.loopId}_${index}`)
+      bubbles.push(parts[index])
+    } catch (error: any) {
+      failedParts += 1
+      lastError = String(error?.message ?? error)
+    }
+  }
+  return {
+    sent: messageIds.length > 0,
+    parts: messageIds.length,
+    messageIds,
+    bubbles,
+    replyType: speak.replyType,
+    ...(failedParts > 0 ? { failedParts, error: lastError } : {}),
   }
 }
 
