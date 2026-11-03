@@ -27,7 +27,15 @@ function bubbleDelay(text: string, minDelayMs: number, maxDelayMs: number): numb
 
 function normalizeParts(input: string | string[]): string[] {
   const list = Array.isArray(input) ? input : [input]
-  return list.map((part) => String(part).trim()).filter(Boolean).slice(0, 3)
+  const parts: string[] = []
+  for (const item of list) {
+    for (const line of String(item).split(/\n+/u)) {
+      const part = line.trim()
+      if (part !== '') parts.push(part)
+      if (parts.length >= 3) return parts
+    }
+  }
+  return parts
 }
 
 /** Send a planned batch of 1-3 short bubbles with human-paced gaps. */
