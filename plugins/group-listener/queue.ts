@@ -13,6 +13,7 @@ export function createGroupState(countThreshold: number): GroupState {
     running: false,
     active: null,
     phase: null,
+    lastPhase: null,
     queue: { urgent: null, normal: null },
     lastLoop: null,
     lastSession: null,

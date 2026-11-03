@@ -80,6 +80,7 @@ export function apply(ctx: Context, config: Config): void {
         running: group.running,
         active: group.active,
         phase: group.phase,
+        lastPhase: group.lastPhase,
         cooldownUntil: group.cooldownUntil,
         queue: queueView(group),
         lastLoop: group.lastLoop,
@@ -97,6 +98,7 @@ export function apply(ctx: Context, config: Config): void {
   const runLoop = async (key: string, item: QueueItem): Promise<void> => {
     const group = stateOf(key)
     group.active = item.loopId
+    group.lastPhase = null
     group.phase = 'analyze'
     persist()
     const snapshot = materialSnapshot(group, item, Math.min(config.analysisWindow, config.bufferSize))
@@ -223,6 +225,7 @@ export function apply(ctx: Context, config: Config): void {
     group.cooldownUntil = finishedAt + (sendResult.sent === true ? config.cooldownReplyMs : config.cooldownNoReplyMs)
     group.active = null
     group.phase = null
+    group.lastPhase = 'state_update'
     persist()
     logger.debug?.('group loop %s: %s', item.loopId, sendResult.sent === true ? 'sent' : 'silent')
   }
@@ -253,6 +256,7 @@ export function apply(ctx: Context, config: Config): void {
     } finally {
       group.running = false
       group.active = null
+      if (group.phase !== null) group.lastPhase = group.phase
       group.phase = null
       persist()
     }

@@ -43,6 +43,7 @@ export interface GroupState {
   running: boolean
   active: string | null
   phase: string | null
+  lastPhase: string | null
   queue: { urgent: QueueItem | null; normal: QueueItem | null }
   lastLoop: any
   lastSession: any
