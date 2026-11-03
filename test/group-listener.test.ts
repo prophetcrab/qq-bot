@@ -12,3 +12,50 @@ test('direct triggers force a spoken result even when analysis says no', () => {
   assert.equal(directFallbackText('mention'), '我在，怎么了？')
   assert.equal(directFallbackText('count'), '')
 })
+
+test('envelope normalization and participant extraction keep one unique sender', async () => {
+  const { normalizeEnvelope, participantsOf } = await import('../plugins/group-listener/envelope.ts')
+  const session = (id: string, qq: string, text: string): any => ({
+    messageId: id,
+    userId: qq,
+    username: `user${qq}`,
+    guildId: 'g1',
+    content: text,
+    elements: [{ type: 'text', attrs: { content: text } }],
+    event: { sender: { user_id: qq, nickname: `昵称${qq}` }, time: 1790000000 },
+  })
+  const one = normalizeEnvelope(session('m1', '20000', 'hello'), 'g1')
+  const two = normalizeEnvelope(session('m2', '20000', 'again'), 'g1')
+  assert.equal(one.sender.qq, '20000')
+  assert.equal(one.sender.nickname, '昵称20000')
+  assert.deepEqual(participantsOf([one, two]), [{ qq: '20000', nickname: '昵称20000' }])
+})
+
+test('group queue merges direct requests and keeps one normal request', async () => {
+  const { createGroupState, enqueueDirect, enqueueNormal, materialSnapshot, takeItem } = await import('../plugins/group-listener/queue.ts')
+  const group = createGroupState()
+  enqueueNormal(group, 'm1', { guildId: 'g1' }, 'count')
+  enqueueDirect(group, 'm2', { guildId: 'g1' }, 'mention')
+  enqueueDirect(group, 'm3', { guildId: 'g1' }, 'reply')
+  const item = group.queue.urgent
+  if (item === null) throw new Error('urgent queue missing')
+  assert.equal(item.triggerMessageIds.length, 2)
+  assert.equal(group.queue.normal, null)
+  takeItem(group, item)
+  assert.equal(group.queue.urgent, null)
+  const snapshot = materialSnapshot(group, item, 100)
+  assert.equal(snapshot.count, 0)
+})
+
+test('group name resolver caches OneBot group names', async () => {
+  const { GroupNameResolver } = await import('../plugins/group-listener/group-names.ts')
+  const { createGroupState } = await import('../plugins/group-listener/queue.ts')
+  const resolver = new GroupNameResolver()
+  const groups = new Map([['g1', createGroupState()]])
+  const bot = { internal: { getGroupList: async () => [{ group_id: 'g1', group_name: '测试群' }] } }
+  assert.equal(await resolver.fill(groups, bot), true)
+  const state = groups.get('g1')
+  if (state === undefined) throw new Error('group missing')
+  assert.equal(state.name, '测试群')
+  assert.equal(await resolver.resolve(bot, 'g1'), '测试群')
+})
