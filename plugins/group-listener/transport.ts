@@ -15,10 +15,12 @@ export class DshTransport {
   }
 
   private origin(): string {
-    if (this.endpoint === '') {
+    // The DSH panel can rewrite the discovery file when its port changes.
+    // Always re-read it when no fixed endpoint was configured.
+    if (this.options.endpoint === '') {
       try {
         const parsed = JSON.parse(readFileSync(resolve(process.cwd(), this.options.discoveryFile), 'utf8'))
-        if (typeof parsed.endpoint === 'string') this.endpoint = parsed.endpoint
+        if (typeof parsed.endpoint === 'string' && parsed.endpoint !== '') this.endpoint = parsed.endpoint
       } catch {
         // The panel writes discovery asynchronously; callers get a clear not-ready result.
       }
