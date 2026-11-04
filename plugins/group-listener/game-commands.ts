@@ -1,3 +1,5 @@
+import { h } from 'koishi'
+
 /** Slash commands are handled before the LLM loop and never enter chat material. */
 export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包', '/兑换钓鱼币', '/钓鱼', '/help', '/帮助'] as const
 
@@ -22,4 +24,18 @@ export async function sendCommandReplies(session: any, replies: unknown): Promis
     if (index > 0) await new Promise((resolve) => setTimeout(resolve, 250))
     await session.send(list[index])
   }
+}
+
+/** Send a gacha image when present, falling back to text. */
+export async function sendGameResult(session: any, result: any): Promise<void> {
+  const image = result?.image
+  if (image && typeof image.data === 'string' && image.data !== '') {
+    try {
+      await session.send(h.image(Buffer.from(image.data, 'base64'), image.mime ?? 'image/png'))
+      return
+    } catch {
+      // Fall through to the text result.
+    }
+  }
+  await sendCommandReplies(session, result?.replies)
 }
