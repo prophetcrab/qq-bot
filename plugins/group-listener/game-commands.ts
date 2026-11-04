@@ -1,10 +1,10 @@
 import { h } from 'koishi'
 
 /** Slash commands are handled before the LLM loop and never enter chat material. */
-export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包', '/兑换钓鱼币', '/钓鱼', '/help', '/帮助'] as const
+export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包', '/help', '/帮助'] as const
 
 /** Commands whose arguments are part of the command and must be forwarded. */
-const ARGUMENT_COMMANDS = new Set<string>(['/兑换钓鱼币', '/钓鱼'])
+const ARGUMENT_COMMANDS = new Set<string>()
 
 export function gameCommandOf(content: string): string | null {
   const line = String(content ?? '').trimStart().split(/\r?\n/u, 1)[0].trimEnd()
@@ -14,28 +14,4 @@ export function gameCommandOf(content: string): string | null {
     }
   }
   return null
-}
-
-export async function sendCommandReplies(session: any, replies: unknown): Promise<void> {
-  const list = (Array.isArray(replies) ? replies : [])
-    .filter((reply): reply is string => typeof reply === 'string' && reply.trim() !== '')
-    .slice(0, 3)
-  for (let index = 0; index < list.length; index += 1) {
-    if (index > 0) await new Promise((resolve) => setTimeout(resolve, 250))
-    await session.send(list[index])
-  }
-}
-
-/** Send a gacha image when present, falling back to text. */
-export async function sendGameResult(session: any, result: any): Promise<void> {
-  const image = result?.image
-  if (image && typeof image.data === 'string' && image.data !== '') {
-    try {
-      await session.send(h.image(Buffer.from(image.data, 'base64'), image.mime ?? 'image/png'))
-      return
-    } catch {
-      // Fall through to the text result.
-    }
-  }
-  await sendCommandReplies(session, result?.replies)
 }

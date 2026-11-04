@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { DshTransport } from '../plugins/group-listener/transport.ts'
+import { DshTransport } from '../plugins/shared/dsh-transport.ts'
 
 test('DshTransport aborts a stalled request within its configured timeout', async () => {
   const original = globalThis.fetch

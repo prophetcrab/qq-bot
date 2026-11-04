@@ -40,6 +40,10 @@ plugins:
       keyword: ping
       reply: pong
     ./plugins/access-control:syf56t: {}
+    ./plugins/game-fishing:fishing01:
+      enabled: true
+      groupOnly: true
+      discoveryFile: data/state/ai.json
     ./plugins/group-listener:gl01:
       minCountTrigger: 3
       maxCountTrigger: 10
