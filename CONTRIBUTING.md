@@ -23,7 +23,7 @@ npx tsc --noEmit
 - AI 触发/上下文/批量/图片留在 Koishi；模型/人设/画像留在 DSH
 - 跨端请求遵守 `dsh-qqbot/host/contracts` 的 schema
 - AI 请求必须带 `apiVersion`
-- 新玩法放 `plugins/games/<name>`，不要改 `ai-chat`
+- 新玩法放 `plugins/games/<name>`，统一改 `group-listener`
 - 不把上游模型错误原文直接发群
 
 ## 发布/模板同步

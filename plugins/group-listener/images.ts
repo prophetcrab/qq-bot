@@ -1,5 +1,5 @@
 /** Image collection and safe downloading for the group listener. */
-import { resolvePublicHttpUrl, sniffImageType } from '../ai-chat/url-safety.ts'
+import { resolvePublicHttpUrl, sniffImageType } from '../shared/url-safety.ts'
 import type { Envelope } from './types.ts'
 
 export interface InboundImage { mediaType: string; data: string }

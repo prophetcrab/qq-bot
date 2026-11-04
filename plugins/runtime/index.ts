@@ -2,7 +2,7 @@
  * Event runtime core.
  *
  * This plugin intentionally does not install a message middleware yet. Phase 1
- * ships the testable runtime primitives; the existing ai-chat plugin keeps the
+ * ships the testable runtime primitives used by group-listener.
  * live message path until the scheduler is wired in a separate migration.
  */
 
@@ -26,7 +26,6 @@ export const name = 'runtime'
 export const inject: string[] = []
 
 export interface Config {
-  /** Reserved switch; the live ai-chat path stays untouched in this phase. */
   shadow: boolean
 }
 
@@ -59,6 +58,6 @@ export function createRuntimeCore(): RuntimeCore {
 export function apply(ctx: Context, config: Config): void {
   const runtime = createRuntimeCore()
   ctx.logger('runtime').debug('runtime core ready (shadow=%s)', config.shadow)
-  // Phase 2 will expose this to ai-chat and install the scheduler middleware.
+  // Phase 2 will expose this to group-listener and install the scheduler middleware.
   void runtime
 }
