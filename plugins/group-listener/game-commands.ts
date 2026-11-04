@@ -1,11 +1,14 @@
 /** Slash commands are handled before the LLM loop and never enter chat material. */
-export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包', '/help', '/帮助'] as const
+export const GAME_COMMANDS = ['/注册', '/签到', '/账号背包', '/兑换钓鱼币', '/钓鱼', '/help', '/帮助'] as const
+
+/** Commands whose arguments are part of the command and must be forwarded. */
+const ARGUMENT_COMMANDS = new Set<string>(['/兑换钓鱼币', '/钓鱼'])
 
 export function gameCommandOf(content: string): string | null {
-  const value = String(content ?? '').trimStart()
+  const line = String(content ?? '').trimStart().split(/\r?\n/u, 1)[0].trimEnd()
   for (const command of GAME_COMMANDS) {
-    if (value === command || value.startsWith(`${command} `) || value.startsWith(`${command}\n`) || value.startsWith(`${command}\t`)) {
-      return command
+    if (line === command || line.startsWith(`${command} `) || line.startsWith(`${command}\t`)) {
+      return ARGUMENT_COMMANDS.has(command) ? line.trim() : command
     }
   }
   return null
