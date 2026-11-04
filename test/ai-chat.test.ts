@@ -177,6 +177,14 @@ test('splitReply 按长度拆分长回复', () => {
   assert.deepEqual(parts.map((p) => p.length), [1000, 1000, 500])
 })
 
+test('splitReply 按空行和句子拆成多条短回复', () => {
+  const parts = aiChat.splitReply('摸鱼？这叫战略性休息。\n\n不过说真的，周日我一般不动笔。你那边白天摸鱼还是也在赶活儿？', 1200)
+  assert.equal(parts.length, 3)
+  assert.match(parts[0], /战略性休息/u)
+  assert.match(parts[2], /赶活儿/u)
+})
+
+
 
 /** Replace fetch with a delayed endpoint-only implementation for concurrency tests. */
 function installDelayedFetch(delayMs: number): any[] {
