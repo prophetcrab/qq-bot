@@ -38,6 +38,11 @@ function normalizeParts(input: string | string[]): string[] {
   return parts
 }
 
+/** Remove a model-written leading @mention before we add the structured one. */
+function stripLeadingMention(text: string): string {
+  return String(text).replace(/^@[^\s@]+\s*/u, '')
+}
+
 /** Send a planned batch of 1-3 short bubbles with human-paced gaps. */
 export async function sendReply(item: QueueItem, speak: any, input: string | string[], timing: SendTiming): Promise<SendResult> {
   const session = item.session
@@ -74,6 +79,10 @@ export async function sendReply(item: QueueItem, speak: any, input: string | str
       ? bubbleDelay(parts[index], timing.firstMinDelayMs, timing.firstMaxDelayMs)
       : bubbleDelay(parts[index], timing.minDelayMs, timing.maxDelayMs))
     let content: any = parts[index]
+    if (index === 0 && speak.replyType === 'at') {
+      const stripped = stripLeadingMention(parts[index])
+      if (stripped !== '') content = stripped
+    }
     const quoteId = index === 0
       ? (speak.quote?.messageIds?.[0] ?? (speak.replyType === 'quote' ? speak.target?.messageIds?.[0] : ''))
       : ''

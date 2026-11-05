@@ -37,3 +37,14 @@ test('at delivery can quote an earlier focus message', async () => {
   assert.equal(result.sent, true)
   assert.match(sent[0], /<at id="20000"\/><quote id="m0"\/>你好/u)
 })
+
+test('at delivery strips a model-written leading @mention instead of doubling it', async () => {
+  const sent: any[] = []
+  const session: any = { guildId: 'g1', send: async (content: any) => { sent.push(content) }, bot: { internal: { _request: async () => ({ retcode: 0 }) } } }
+  await sendReply({ loopId: 'l2', session } as any, {
+    replyType: 'at', target: { messageIds: ['m1'], userIds: ['20000'] },
+  }, ['@螃蟹MKII 你艾特的不是我啊'], timing)
+  assert.equal(sent.length, 1)
+  assert.match(sent[0], /^<at id="20000"\/>你艾特的不是我啊$/u)
+  assert.doesNotMatch(sent[0], /@螃蟹MKII/u)
+})
